@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: http://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.2.4
+Version: 8.2.5
 Author: Max Foundry
 Author URI: http://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.4');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.5');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -722,6 +722,7 @@ class MGMediaLibraryFolders {
                        'no_images_selected' => esc_html__('No images were selected.', 'maxgalleria-media-library' ),
                        'no_quotes' => esc_html__('Folder names cannot contain single or double quotes.', 'maxgalleria-media-library' ),
                        'no_spaces' => esc_html__('Folder names cannot contain spaces.', 'maxgalleria-media-library' ),
+                       'no_punctuation' => __('Folder names may only include the following punctuation marks: period, dash, underscore, and tilde.', 'maxgalleria-media-library' ),
                        'no_blank' => esc_html__('The folder name cannot be blank.' ),
                        'no_blank_filename' => esc_html__('The new file name cannot be blank.' ),                  
                        'valid_file_name' => esc_html__('Please enter a valid file name with no spaces.', 'maxgalleria-media-library' ),
@@ -6095,8 +6096,27 @@ AND meta_key = '_wp_attached_file'";
       }
     }
   }
-  
+
   public function search_elementor_array($image_id, &$jarray, $replace_image_location, $replace_destination_url, $post_id) {
+  
+    $save = false;
+    if(array_key_exists('settings', $jarray)) {
+      if($jarray['settings'] !== null) { // Add null check here
+        if(array_key_exists('background_background', $jarray['settings'])) {
+          if($jarray['settings']['background_background'] == 'classic') {
+            if(array_key_exists('id', $jarray['settings']['background_image'])) {
+              if($jarray['settings']['background_image']['id'] == $image_id) {
+                $jarray['settings']['background_image']['url'] = $replace_destination_url;
+                $save = true;              
+              }              
+            }          
+          }        
+        }        
+      }
+    }    
+  }  
+  
+  public function search_elementor_array1($image_id, &$jarray, $replace_image_location, $replace_destination_url, $post_id) {
     
     $save = false;
     if(array_key_exists('settings', $jarray)) {

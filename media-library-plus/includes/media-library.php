@@ -1016,7 +1016,12 @@ function create_new_folder(new_folder_name) {
     alert(mgmlp_ajax.no_blank);
     return false;
   } 
-
+  
+  if (/[!"#$%&'()*+,/:;<=>?@[\\\]^`{|}]/.test(new_folder_name)) {
+    alert(mgmlp_ajax.no_punctuation);
+    return false;
+  }  
+  
   jQuery("#ajaxloader").show();
 
   jQuery.ajax({
