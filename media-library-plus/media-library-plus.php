@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: http://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.2.6
+Version: 8.2.7
 Author: Max Foundry
 Author URI: http://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.6');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.7');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -2593,19 +2593,23 @@ AND meta_key = '_wp_attached_file'", $parent_folder_id);
     $allowed_dir = rtrim($absolute_path, '/');
 		//$this->write_log("absolute_path $absolute_path");
             
-    $new_folder_path = $absolute_path . $new_folder_name ;
-		//$this->write_log("new_folder_path $new_folder_path");
+    // Sanitize the new folder name
+    $new_folder_name = basename($new_folder_name);
 
-    // prevent directory traversal
+    // Construct the new folder path
+    $new_folder_path = rtrim($absolute_path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $new_folder_name;
+
+    // Validate up to the parent directory
     $parent_dir = dirname($new_folder_path);
     $real_parent_dir = realpath($parent_dir);
 
-    if (strpos($real_parent_dir, $allowed_dir) !== 0) {  
-        $message = esc_html__('Directory traversal attempt detected.','maxgalleria-media-library');
-        $data = array ('message' => esc_html($message),  'refresh' => false );
+    // Check if the parent directory exists and is within the allowed directory
+    if (!$real_parent_dir || strpos($real_parent_dir, rtrim($allowed_dir, DIRECTORY_SEPARATOR)) !== 0) {  
+        $message = esc_html__('Directory traversal attempt detected.', 'maxgalleria-media-library');
+        $data = array('message' => esc_html($message), 'refresh' => false);
         echo json_encode($data);
         die();
-    }    
+    }
 
     //check for new folder name that begins with '..' and abort
     if (strpos($new_folder_name, '..') !== false) {
