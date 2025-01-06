@@ -3,14 +3,14 @@ Contributors: maxfoundry, AlanP57
 Tags: media library folders, media library folders, organize media library
 Requires at least: 4.0
 Tested up to: 6.7
-Stable tag: 8.2.7
+Stable tag: 8.2.8
 License: GPLv2 or later
-License URI: http://www.gnu.org/licenses/gpl-2.0.html
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Easier file and folder management for WordPress Media Library for Galleries and Albums
 
 == Description ==
-[Media Library Folders for WordPress](http://www.maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlfp&utm_content=first&utm_campaign=firstword) creates actual folders in your WordPress Media Library:
+[Media Library Folders for WordPress](https://www.maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlfp&utm_content=first&utm_campaign=firstword) creates actual folders in your WordPress Media Library:
 
 * Actual folders make it easier to [organize your WordPress media library](https://maxgalleria.com/organized-wordpress-media-library-folders/?utm_source=wordpress&utm_medium=mlfp&utm_content=organize&utm_campaign=organize) while reducing server burden.
 * [Add and build new Media library folders](https://maxgalleria.com/add-organize-media-library-folders/) to label and organize as you wish instead of just month/date.
@@ -45,7 +45,7 @@ MLF adds to and works with the functionality of WordPress Media Library. It does
     
 = Media Library Folders Pro for WordPress =
 
-[Media Library Folders Pro for WordPress](http://www.maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlfp&utm_content=mlpp&utm_campaign=repo) lets you:
+[Media Library Folders Pro for WordPress](https://www.maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlfp&utm_content=mlpp&utm_campaign=repo) lets you:
 
 * Select and add images to your posts and pages from the editor through MLFs integration
 * Organize your [media library folders](https://maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlf&utm_content=mlf&utm_campaign=repo) with categories
@@ -160,7 +160,7 @@ This happens when a parent folder is missing from the folder data. To fix this y
 
 = Unable to Insert files from Media Library Folders into Posts or Pages =
 
-For inserting images and files into posts and pages you will have to use the existing Media Library. The ability to insert items from the Media Library Folders user interface is only available in [Media Library Folders Pro](http://www.maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlfp&utm_content=mlpp&utm_campaign=repo). This does not mean you cannot insert files added to Media Library Folders into any Wordpress posts or pages. Media Library Folders adds a folder user interface and file operations to the existing media library and it does not add a second media library. Since all the images are in the same media library there is no obstacle to inserting them anywhere Wordpress allows media files to be inserted. There is just no folder tree available in the media library insert window for locating images in a particular folder. We chose to include the folder tree for inserting images in posts and page in the Pro version along with other features in order to fund the cost of providing free technical support and continued development of the plugin.
+For inserting images and files into posts and pages you will have to use the existing Media Library. The ability to insert items from the Media Library Folders user interface is only available in [Media Library Folders Pro](https://www.maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlfp&utm_content=mlpp&utm_campaign=repo). This does not mean you cannot insert files added to Media Library Folders into any Wordpress posts or pages. Media Library Folders adds a folder user interface and file operations to the existing media library and it does not add a second media library. Since all the images are in the same media library there is no obstacle to inserting them anywhere Wordpress allows media files to be inserted. There is just no folder tree available in the media library insert window for locating images in a particular folder. We chose to include the folder tree for inserting images in posts and page in the Pro version along with other features in order to fund the cost of providing free technical support and continued development of the plugin.
 
 = Unable to Update Media Library Folders Reset =
 
@@ -197,6 +197,9 @@ Users can upload multiple files by using drag and drop. When the Add Files butto
 Because most images and files in the media library have corresponding links embedded in site’s posts and pages, Media Library Folders does not allow folders to be rename or moved in order to prevent breaking these links. Rather, to rename or move a folder, one needs to create a new folder and move the files from the old folder to the new. During the move process, Media Library Folders will scan the sites standard posts and pages for any links matching the old address of the images or files and update them to the new address.
 
 == Changelog ==
+= 8.2.8 =
+* Changed all links using 'http' to 'https'
+
 = 8.2.7 =
 * Fixed issue with creating new folders
 

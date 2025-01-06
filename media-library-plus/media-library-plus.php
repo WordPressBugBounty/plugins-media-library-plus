@@ -1,13 +1,13 @@
 <?php
 /*
 Plugin Name: Media Library Folders
-Plugin URI: http://maxgalleria.com
+Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.2.7
+Version: 8.2.8
 Author: Max Foundry
-Author URI: http://maxfoundry.com
+Author URI: https://maxfoundry.com
 
-Copyright 2015-2022 Max Foundry, LLC (http://maxfoundry.com)
+Copyright 2015-2022 Max Foundry, LLC (https://maxfoundry.com)
 */
 
 if(defined('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY')) {
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.7');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.8');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -877,8 +877,8 @@ class MGMediaLibraryFolders {
           
     $html .= '  <div id="mlfp-link-container">' . PHP_EOL;
     $html .= '    <div id="mlfp-links">' . PHP_EOL;
-    $html .= '      <div>' . esc_html__('Brought to you by ', 'maxgalleria-media-library') .' <a target="_blank" href="http://maxfoundry.com">MaxFoundry</a></div>' . PHP_EOL;
-    $html .= '      <div>' . esc_html__('Makers of', 'maxgalleria-media-library') . ' <a target="_blank"  href="http://maxbuttons.com/">MaxButtons</a>, <a target="_blank" href="http://maxbuttons.com/product-category/button-packs/">WordPress Buttons</a> ' . esc_html__('and', 'maxgalleria-media-library') . ' <a target="_blank" href="http://maxgalleria.com/">MaxGalleria</a></div>' . PHP_EOL;
+    $html .= '      <div>' . esc_html__('Brought to you by ', 'maxgalleria-media-library') .' <a target="_blank" href="https://maxfoundry.com">MaxFoundry</a></div>' . PHP_EOL;
+    $html .= '      <div>' . esc_html__('Makers of', 'maxgalleria-media-library') . ' <a target="_blank"  href="https://maxbuttons.com/">MaxButtons</a>, <a target="_blank" href="https://maxbuttons.com/product-category/button-packs/">WordPress Buttons</a> ' . esc_html__('and', 'maxgalleria-media-library') . ' <a target="_blank" href="https://maxgalleria.com/">MaxGalleria</a></div>' . PHP_EOL;
     $html .= '    </div>' . PHP_EOL;
           
     $html .= '    <div id="mlfp-support">' . PHP_EOL;
@@ -4644,8 +4644,8 @@ and meta_key = '_wp_attached_file'";
 
 					</div> <!-- mgmlp-title-area -->
 					<div id="new-top-promo">
-						<a id="mf-top-logo" target="_blank" href="http://maxfoundry.com"><img alt="maxfoundry logo" src="<?php echo esc_url(MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . "/images/mf-logo.png") ?>" width="140" height="25" ></a>
-						<p class="center-text"><?php esc_html_e('Makers of', 'maxgalleria-media-library' ); ?> <a target="_blank"  href="http://maxbuttons.com/">MaxButtons</a>, <a target="_blank" href="http://maxbuttons.com/product-category/button-packs/">WordPress Buttons</a> <?php esc_html_e('and', 'maxgalleria-media-library' ); ?> <a target="_blank" href="http://maxgalleria.com/">MaxGalleria</a></p>
+						<a id="mf-top-logo" target="_blank" href="https://maxfoundry.com"><img alt="maxfoundry logo" src="<?php echo esc_url(MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . "/images/mf-logo.png") ?>" width="140" height="25" ></a>
+						<p class="center-text"><?php esc_html_e('Makers of', 'maxgalleria-media-library' ); ?> <a target="_blank"  href="https://maxbuttons.com/">MaxButtons</a>, <a target="_blank" href="https://maxbuttons.com/product-category/button-packs/">WordPress Buttons</a> <?php esc_html_e('and', 'maxgalleria-media-library' ); ?> <a target="_blank" href="https://maxgalleria.com/">MaxGalleria</a></p>
 				    <p class="center-text-no-ital"><?php esc_html_e('Click here to', 'maxgalleria-media-library' ); ?> <a href="<?php echo esc_url(MLF_TS_URL) ?>" target="_blank"><?php esc_html_e('Fix Common Problems', 'maxgalleria-media-library'); ?></a></p>
 						<p class="center-text-no-ital"><?php esc_html_e('Need help? Click here for', 'maxgalleria-media-library' ); ?> <a href="https://wordpress.org/support/plugin/media-library-plus" target="_blank"><?php esc_html_e('Awesome Support!', 'maxgalleria-media-library' ); ?></a></p>
 						<p class="center-text-no-ital"><?php esc_html_e('Or Email Us at', 'maxgalleria-media-library' ); ?> <a href="mailto:support@maxfoundry.com">support@maxfoundry.com</a></p>
@@ -5001,7 +5001,7 @@ and meta_key = '_wp_attached_file'";
 	}
 				
 	public function get_browser() {
-		// http://www.php.net/manual/en/function.get-browser.php#101125.
+		// https://www.php.net/manual/en/function.get-browser.php#101125.
 		// Cleaned up a bit, but overall it's the same.
 
 		$user_agent = $_SERVER['HTTP_USER_AGENT'];
