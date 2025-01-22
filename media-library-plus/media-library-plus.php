@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.2.8
+Version: 8.2.9
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.8');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.9');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -1451,7 +1451,36 @@ ORDER by ID";
     return array();
   }  
   
-  private function folder_exist($folder_path) {
+  public function folder_exist($folder_path) {
+    global $wpdb;
+    
+    // Normalize and sanitize the folder path
+    $relative_path = substr($folder_path, $this->base_url_length);
+    $relative_path = ltrim($relative_path, '/');
+    $relative_path = sanitize_text_field($relative_path);
+    
+    $normalized_relative_path = strtolower(rtrim(preg_replace('/\/+/', '/', $relative_path), '/'));
+    error_log("normalized_relative_path $normalized_relative_path");
+
+    // Use a prepared statement to query the database
+    $sql = $wpdb->prepare(
+        "SELECT p.ID 
+         FROM $wpdb->posts p
+         INNER JOIN   $wpdb->postmeta pm ON pm.post_id = p.ID
+         WHERE pm.meta_value = %s 
+         AND pm.meta_key = '_wp_attached_file'
+         LIMIT 1",
+        $normalized_relative_path
+    );
+
+    // Execute the query
+    $row = $wpdb->get_row($sql);
+
+    // Return the ID if the folder exists, otherwise false
+    return $row ? $row->ID : false;
+  }    
+  
+  private function folder_exist2($folder_path) {
     
     global $wpdb;    
     
@@ -2584,6 +2613,116 @@ AND meta_key = '_wp_attached_file'", $parent_folder_id);
 		
     $row = $wpdb->get_row($sql);
 		
+    $baseurl = $this->upload_dir['baseurl'];
+    $baseurl = rtrim($baseurl, '/') . '/';
+    $image_location = $baseurl . ltrim($row->attached_file, '/');
+
+    // Get the absolute base directory, resolving symlinks
+    $base_dir = realpath($this->upload_dir['basedir']);
+    if ($base_dir === false) {
+        $message = esc_html__('Base directory is invalid or inaccessible.', 'maxgalleria-media-library');
+        $data = array('message' => esc_html($message), 'refresh' => false);
+        echo json_encode($data);
+        die();
+    }
+
+    // Sanitize the new folder name
+    $new_folder_name = basename($new_folder_name);
+
+    // Construct the new folder path
+    $new_folder_path = rtrim($base_dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $new_folder_name;
+
+    // Resolve the parent directory path, resolving symlinks
+    $real_parent_dir = realpath(dirname($new_folder_path));
+    
+    error_log("new_folder_path $new_folder_path");
+    error_log("real_parent_dir $real_parent_dir");
+    
+    if (!$real_parent_dir) {
+        $message = esc_html__('Invalid directory path.', 'maxgalleria-media-library');
+        $data = array('message' => esc_html($message), 'refresh' => false);
+        echo json_encode($data);
+        die();
+    }
+
+    // Check if the resolved parent directory is within the resolved base directory
+    if (strpos($real_parent_dir, $base_dir) !== 0) {
+        $message = esc_html__('Directory traversal attempt detected.', 'maxgalleria-media-library');
+        $data = array('message' => esc_html($message), 'refresh' => false);
+        echo json_encode($data);
+        die();
+    }
+
+    //check for new folder name that begins with '..' and abort
+    if (strpos($new_folder_name, '..') !== false) {
+      $message = esc_html__('Invalid folder name.','maxgalleria-media-library');
+      $data = array ('message' => esc_html($message),  'refresh' => false );
+      echo json_encode($data);
+      die();
+    }
+    
+    $new_folder_url = $this->get_file_url_for_copy($new_folder_path);
+		//$this->write_log("new_folder_url $new_folder_url");
+		
+		//$this->write_log("Trying to create directory at $new_folder_path, $parent_folder_id, $new_folder_url");
+    
+    if(!file_exists($new_folder_path)) {
+      if(mkdir($new_folder_path)) {
+        if(defined('FS_CHMOD_DIR'))
+			    @chmod($new_folder_path, FS_CHMOD_DIR);
+        else  
+			    @chmod($new_folder_path, 0755);
+        //if($this->add_media_folder($new_folder_name, $parent_folder_id, $new_folder_url)){
+				$new_folder_id = $this->add_media_folder($new_folder_name, $parent_folder_id, $new_folder_url);
+				if($new_folder_id) {
+					
+          $message = esc_html__('The folder was created.','maxgalleria-media-library');
+					$folders = $this->get_folder_data($parent_folder_id);
+					$data = array ('message' => esc_html($message), 'folders' => $folders, 'refresh' => true, 'new_folder' => esc_attr($new_folder_id));
+					echo json_encode($data);
+					
+        } else {					
+          $message = esc_html__('There was a problem creating the folder.','maxgalleria-media-library');
+					$data = array ('message' => esc_html($message),  'refresh' => false );
+					echo json_encode($data);
+				}	
+      }
+    } else {
+			$message = esc_html__('The folder already exists.','maxgalleria-media-library');
+			$data = array ('message' => esc_html($message),  'refresh' => false );
+			echo json_encode($data);
+		}	
+
+    die();
+  }
+  
+  public function create_new_folder1() {
+        
+    global $wpdb;
+    
+    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
+      exit(esc_html__('missing nonce! Please refresh this page.','maxgalleria-media-library'));
+    }
+    
+    // Check if the current user has the capability to upload files
+    if(!current_user_can('upload_files')){
+      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    }
+    
+    if ((isset($_POST['parent_folder'])) && (strlen(trim($_POST['parent_folder'])) > 0))
+      $parent_folder_id = intval(trim(sanitize_text_field($_POST['parent_folder'])));
+    
+    
+    if ((isset($_POST['new_folder_name'])) && (strlen(trim($_POST['new_folder_name'])) > 0))
+      $new_folder_name = trim(sanitize_text_field($_POST['new_folder_name']));
+    
+      $sql = $wpdb->prepare("select meta_value as attached_file
+from {$wpdb->prefix}postmeta 
+where post_id = %d    
+AND meta_key = '_wp_attached_file'", $parent_folder_id);
+		
+    $row = $wpdb->get_row($sql);
+		
 		$baseurl = $this->upload_dir['baseurl'];
 		$baseurl = rtrim($baseurl, '/') . '/';
 		$image_location = $baseurl . ltrim($row->attached_file, '/');
@@ -2653,6 +2792,7 @@ AND meta_key = '_wp_attached_file'", $parent_folder_id);
 
     die();
   }
+  
 
   public function get_absolute_path($url) {
 		
@@ -5855,15 +5995,29 @@ AND meta_key = '_wp_attached_file'";
                 $where = array('post_id' => $copy_id);
                 $wpdb->update( $table, $data, $where);
 
-                // get the uploads dir name
+//                // get the uploads dir name
+//                $basedir = $this->upload_dir['baseurl'];
+//                $uploads_dir_name_pos = strrpos($basedir, '/');
+//                $uploads_dir_name = substr($basedir, $uploads_dir_name_pos+1);
+//
+//                //find the name and cut off the part with the uploads path
+//                $string_position = strpos($destination_name, $uploads_dir_name);
+//                $uploads_dir_length = strlen($uploads_dir_name) + 1;
+//                $uploads_location = substr($destination_name, $string_position+$uploads_dir_length);
+                
+                // Get the uploads dir name
                 $basedir = $this->upload_dir['baseurl'];
                 $uploads_dir_name_pos = strrpos($basedir, '/');
-                $uploads_dir_name = substr($basedir, $uploads_dir_name_pos+1);
+                $uploads_dir_name = substr($basedir, $uploads_dir_name_pos + 1);
 
-                //find the name and cut off the part with the uploads path
-                $string_position = strpos($destination_name, $uploads_dir_name);
+                // Fetch the name of the content folder dynamically using the filter
+                $content_folder = apply_filters('mlfp_content_folder', 'wp-content');
+
+                // Find the name and cut off the part with the uploads path
+                $string_position = strpos($destination_name, $uploads_dir_name, strpos($destination_name, $content_folder));
                 $uploads_dir_length = strlen($uploads_dir_name) + 1;
-                $uploads_location = substr($destination_name, $string_position+$uploads_dir_length);
+                $uploads_location = substr($destination_name, $string_position + $uploads_dir_length);                
+                
                 if($this->is_windows()) 
                   $uploads_location = str_replace('\\','/', $uploads_location);      
 
@@ -6639,15 +6793,29 @@ AND meta_key = '_wp_attached_file'";
               
               //add postmete record
 
-              // get the uploads dir name
+//              // get the uploads dir name
+//              $basedir = $this->upload_dir['baseurl'];
+//              $uploads_dir_name_pos = strrpos($basedir, '/');
+//              $uploads_dir_name = substr($basedir, $uploads_dir_name_pos+1);
+//
+//              //find the name and cut off the part with the uploads path
+//              $string_position = strpos($destination_name, $uploads_dir_name);
+//              $uploads_dir_length = strlen($uploads_dir_name) + 1;
+//              $uploads_location = substr($destination_name, $string_position+$uploads_dir_length);
+
+              // Get the uploads dir name
               $basedir = $this->upload_dir['baseurl'];
               $uploads_dir_name_pos = strrpos($basedir, '/');
-              $uploads_dir_name = substr($basedir, $uploads_dir_name_pos+1);
+              $uploads_dir_name = substr($basedir, $uploads_dir_name_pos + 1);
 
-              //find the name and cut off the part with the uploads path
-              $string_position = strpos($destination_name, $uploads_dir_name);
+              // Fetch the name of the content folder dynamically using the filter
+              $content_folder = apply_filters('mlfp_content_folder', 'wp-content');
+
+              // Find the name and cut off the part with the uploads path
+              $string_position = strpos($destination_name, $uploads_dir_name, strpos($destination_name, $content_folder));
               $uploads_dir_length = strlen($uploads_dir_name) + 1;
-              $uploads_location = substr($destination_name, $string_position+$uploads_dir_length);
+              $uploads_location = substr($destination_name, $string_position + $uploads_dir_length);
+
               if($this->is_windows()) 
                 $uploads_location = str_replace('\\','/', $uploads_location);      
 
