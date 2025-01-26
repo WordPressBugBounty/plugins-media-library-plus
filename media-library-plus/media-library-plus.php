@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.2.9
+Version: 8.3.0
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.2.9');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.0');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -2586,7 +2586,7 @@ where ID = $folder_id";
 			return $this->uploads_folder_ID;
   }
   
-  public function create_new_folder() {
+  public function create_new_folder2() {
         
     global $wpdb;
     
@@ -2696,7 +2696,7 @@ AND meta_key = '_wp_attached_file'", $parent_folder_id);
     die();
   }
   
-  public function create_new_folder1() {
+  public function create_new_folder() {
         
     global $wpdb;
     

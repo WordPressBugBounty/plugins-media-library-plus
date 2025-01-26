@@ -28,6 +28,7 @@ events-manager
 fusionredux
 fusion-styles
 fusion-scripts
+fw-backup
 galleries
 gppro
 gravity_forms
