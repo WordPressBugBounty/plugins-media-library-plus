@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.3.0
+Version: 8.3.1
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.0');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.1');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -531,9 +531,9 @@ class MGMediaLibraryFolders {
       exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
     } 
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage options.','maxgalleria-media-library'));
     }
     
     
@@ -1460,7 +1460,7 @@ ORDER by ID";
     $relative_path = sanitize_text_field($relative_path);
     
     $normalized_relative_path = strtolower(rtrim(preg_replace('/\/+/', '/', $relative_path), '/'));
-    error_log("normalized_relative_path $normalized_relative_path");
+    //error_log("normalized_relative_path $normalized_relative_path");
 
     // Use a prepared statement to query the database
     $sql = $wpdb->prepare(
@@ -2326,7 +2326,7 @@ function process_mc_data(phase, folder_id, action_name, parent_folder, serial_co
     $blocked_image_url = '';  
     $block_access_table = sanitize_text_field($wpdb->prefix . MAXGALLERIA_MEDIA_LIBRARY_BLOCK_ACCESS_TABLE);
     $current_user = get_current_user_id();
-    $is_admin = current_user_can('administrator');
+    $is_admin = current_user_can('manage_options');
     
 		if($image_link === "1")
 			$image_link = true;
@@ -2585,117 +2585,7 @@ where ID = $folder_id";
     else
 			return $this->uploads_folder_ID;
   }
-  
-  public function create_new_folder2() {
-        
-    global $wpdb;
     
-    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
-      exit(esc_html__('missing nonce! Please refresh this page.','maxgalleria-media-library'));
-    }
-    
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
-    }
-    
-    if ((isset($_POST['parent_folder'])) && (strlen(trim($_POST['parent_folder'])) > 0))
-      $parent_folder_id = intval(trim(sanitize_text_field($_POST['parent_folder'])));
-    
-    
-    if ((isset($_POST['new_folder_name'])) && (strlen(trim($_POST['new_folder_name'])) > 0))
-      $new_folder_name = trim(sanitize_text_field($_POST['new_folder_name']));
-    
-      $sql = $wpdb->prepare("select meta_value as attached_file
-from {$wpdb->prefix}postmeta 
-where post_id = %d    
-AND meta_key = '_wp_attached_file'", $parent_folder_id);
-		
-    $row = $wpdb->get_row($sql);
-		
-    $baseurl = $this->upload_dir['baseurl'];
-    $baseurl = rtrim($baseurl, '/') . '/';
-    $image_location = $baseurl . ltrim($row->attached_file, '/');
-
-    // Get the absolute base directory, resolving symlinks
-    $base_dir = realpath($this->upload_dir['basedir']);
-    if ($base_dir === false) {
-        $message = esc_html__('Base directory is invalid or inaccessible.', 'maxgalleria-media-library');
-        $data = array('message' => esc_html($message), 'refresh' => false);
-        echo json_encode($data);
-        die();
-    }
-
-    // Sanitize the new folder name
-    $new_folder_name = basename($new_folder_name);
-
-    // Construct the new folder path
-    $new_folder_path = rtrim($base_dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $new_folder_name;
-
-    // Resolve the parent directory path, resolving symlinks
-    $real_parent_dir = realpath(dirname($new_folder_path));
-    
-    error_log("new_folder_path $new_folder_path");
-    error_log("real_parent_dir $real_parent_dir");
-    
-    if (!$real_parent_dir) {
-        $message = esc_html__('Invalid directory path.', 'maxgalleria-media-library');
-        $data = array('message' => esc_html($message), 'refresh' => false);
-        echo json_encode($data);
-        die();
-    }
-
-    // Check if the resolved parent directory is within the resolved base directory
-    if (strpos($real_parent_dir, $base_dir) !== 0) {
-        $message = esc_html__('Directory traversal attempt detected.', 'maxgalleria-media-library');
-        $data = array('message' => esc_html($message), 'refresh' => false);
-        echo json_encode($data);
-        die();
-    }
-
-    //check for new folder name that begins with '..' and abort
-    if (strpos($new_folder_name, '..') !== false) {
-      $message = esc_html__('Invalid folder name.','maxgalleria-media-library');
-      $data = array ('message' => esc_html($message),  'refresh' => false );
-      echo json_encode($data);
-      die();
-    }
-    
-    $new_folder_url = $this->get_file_url_for_copy($new_folder_path);
-		//$this->write_log("new_folder_url $new_folder_url");
-		
-		//$this->write_log("Trying to create directory at $new_folder_path, $parent_folder_id, $new_folder_url");
-    
-    if(!file_exists($new_folder_path)) {
-      if(mkdir($new_folder_path)) {
-        if(defined('FS_CHMOD_DIR'))
-			    @chmod($new_folder_path, FS_CHMOD_DIR);
-        else  
-			    @chmod($new_folder_path, 0755);
-        //if($this->add_media_folder($new_folder_name, $parent_folder_id, $new_folder_url)){
-				$new_folder_id = $this->add_media_folder($new_folder_name, $parent_folder_id, $new_folder_url);
-				if($new_folder_id) {
-					
-          $message = esc_html__('The folder was created.','maxgalleria-media-library');
-					$folders = $this->get_folder_data($parent_folder_id);
-					$data = array ('message' => esc_html($message), 'folders' => $folders, 'refresh' => true, 'new_folder' => esc_attr($new_folder_id));
-					echo json_encode($data);
-					
-        } else {					
-          $message = esc_html__('There was a problem creating the folder.','maxgalleria-media-library');
-					$data = array ('message' => esc_html($message),  'refresh' => false );
-					echo json_encode($data);
-				}	
-      }
-    } else {
-			$message = esc_html__('The folder already exists.','maxgalleria-media-library');
-			$data = array ('message' => esc_html($message),  'refresh' => false );
-			echo json_encode($data);
-		}	
-
-    die();
-  }
-  
   public function create_new_folder() {
         
     global $wpdb;
@@ -2739,7 +2629,7 @@ AND meta_key = '_wp_attached_file'", $parent_folder_id);
     $new_folder_path = rtrim($absolute_path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $new_folder_name;
 
     // Validate up to the parent directory
-    $parent_dir = dirname($new_folder_path);
+    $parent_dir = dirname($new_folder_path);        
     $real_parent_dir = realpath($parent_dir);
 
     // Check if the parent directory exists and is within the allowed directory
@@ -3938,7 +3828,7 @@ and pm.meta_key = '_wp_attached_file'";
 	}
   
   public function mlp_features_notice() {
-    if( current_user_can( 'manage_options' ) ) {  ?>
+    if( current_user_can( 'upload_files' ) ) {  ?>
       <div class="updated notice maxgalleria-mlp-notice">         
         <div id='mlp_logo'></div>
         <div id='maxgalleria-mlp-notice-3'><p id='mlp-notice-title'><?php esc_html_e('Is there a feature you would like for us to add to', 'maxgalleria-media-library' ); ?><br><?php esc_html_e('Media Library Folders Pro? Let us know.', 'maxgalleria-media-library' ); ?></p>
@@ -3952,7 +3842,7 @@ and pm.meta_key = '_wp_attached_file'";
   }
   
   public function mlp_review_notice() {
-    if( current_user_can( 'manage_options' ) ) {  ?>
+    if( current_user_can( 'upload_files' ) ) {  ?>
       <div class="updated notice maxgalleria-mlp-notice">         
         <div id='mlp_logo'></div>
         <div id='maxgalleria-mlp-notice-3'><p id='mlp-notice-title'><?php esc_html_e( 'Rate us Please!', 'maxgalleria-media-library' ); ?></p>
@@ -5078,9 +4968,9 @@ and meta_key = '_wp_attached_file'";
       exit(__('missing nonce!','maxgalleria-media-library'));
     }
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage options.','maxgalleria-media-library'));
     }    
     
     if(get_option(MLFP_BDA_AUTO_PROTECT_DISABLED, 'off') == 'on') {
@@ -5431,9 +5321,9 @@ where folder_id = $folder_id";
       exit(esc_html__('missing nonce! Please refresh this page.','maxgalleria-media-library'));
     } 
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage_options.','maxgalleria-media-library'));
     }    
 
 		if ((isset($_POST['scaling_status'])) && (strlen(trim($_POST['scaling_status'])) > 0))
@@ -6455,9 +6345,9 @@ AND meta_key = '_wp_attached_file'";
       exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
     }
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage options.','maxgalleria-media-library'));
     }
         
     $activate_mlfp_bdp = $this->get_ajax_paramater('activate_mlfp_bdp');
@@ -6583,9 +6473,9 @@ AND meta_key = '_wp_attached_file'";
       exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
     }
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage options.','maxgalleria-media-library'));
     }
     
     $no_access_page_id = intval($this->get_ajax_paramater('no_access_page_id'));
@@ -7207,7 +7097,7 @@ AND meta_key = '_wp_attached_file'";
     }
     
     // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
+    if(!current_user_can('manage_options')){
       exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
     }
         
@@ -7291,9 +7181,9 @@ WHERE pm.meta_key = '_wp_attached_file' limit %d, %d", $offset, $items_per_page)
       exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
     }
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage options.','maxgalleria-media-library'));
     }
             
     $new_block_ip = $this->get_ajax_paramater('new_block_ip');
@@ -7351,9 +7241,9 @@ WHERE pm.meta_key = '_wp_attached_file' limit %d, %d", $offset, $items_per_page)
       exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
     }
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage options.','maxgalleria-media-library'));
     }
         
     $data = $this->get_blocked_ips();
@@ -7373,9 +7263,9 @@ WHERE pm.meta_key = '_wp_attached_file' limit %d, %d", $offset, $items_per_page)
       exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
     }
     
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
+    // Check if the current user has the capability to manage options
+    if(!current_user_can('manage_options')){
+      exit(esc_html__('You do not have the capability to manage options.','maxgalleria-media-library'));
     }
         
     if ((isset($_POST['serial_ips'])) && (strlen(trim($_POST['serial_ips'])) > 0)) {
@@ -7390,14 +7280,11 @@ WHERE pm.meta_key = '_wp_attached_file' limit %d, %d", $offset, $items_per_page)
     
     $table = $wpdb->prefix . BLOCKED_IPS_TABLE;    
     
-    //error_log(print_r($unblock_ips, true));
     foreach($unblock_ips as $unblock_ip) {
-      if(filter_var($unblock_ip, FILTER_VALIDATE_IP)) {
         $updated = true;
-        $where = array('ip_id' => $unblock_ip);
-        $wpdb->delete($table, $where);
-        $message = esc_html__('The IP addresses were unblocked.','maxgalleria-media-library');
-      }
+        $where = array('ip_id' => (int) $unblock_ip);
+        if($wpdb->delete($table, $where))
+          $message = esc_html__('The IP addresses were unblocked.','maxgalleria-media-library');
     }
         
     $return = array('message' => $message, 'result' => $updated);
