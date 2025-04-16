@@ -2,8 +2,8 @@
 Contributors: maxfoundry, AlanP57
 Tags: media library folders, media library folders, organize media library
 Requires at least: 4.0
-Tested up to: 6.7.1
-Stable tag: 8.3.1
+Tested up to: 6.8
+Stable tag: 8.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,7 +42,42 @@ MLF adds to and works with the functionality of WordPress Media Library. It does
 * Disable copy and right click
 * Generate and limit private URLs
 * Restrict access to private URLs by IP Address
+
+With these features, site administrators can now block access to viewing or downloading files within the media library. To activate, go to the Block Direct Access tab in Media Library Folders Pro Settings and check the 'Activate Block Direct Access' option and click the Update Settings button. This create a folder in the media library, 'protected-content' For site that are using Apache, this action will also updates the sites .thaccess file to make the 'protected-content' folder inaccessible to internet users.
+
+For those using Nginx or IIS (Windows Server), making the 'protected-content' inaccessible requires manually update the site's configuration:
+
+For Nginx, add these rewrite rules on your server configuration:
+
+rewrite wp-content/uploads/protected-content(\/[A-Za-z0-9_@.\/&+-]+)+\.([A-Za-z0-9_@.\/&+-]+)$ "/index.php?mlfp_bdp=$1&block_access=true" last;
+rewrite private/([a-zA-Z0-9-_.]+)$ "/index.php?mlfp_bdp=$1" last;
+
+For IIS, edit or create a web.config file in the root folder of your Wordpress site and add these rules:
+
+<?xml version="1.0"?>
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <!-- Block Direct Access Start -->
+        <rule name="Imported Rule 1" stopProcessing="true">
+          <match url="private/([a-zA-Z0-9]+)$" ignoreCase="false"/>
+          <action type="Rewrite" url="index.php?mlfp_bdp={R:1}" appendQueryString="false"/>
+        </rule>
+        <rule name="Imported Rule 2" stopProcessing="true">
+          <match url="wp-content/uploads/protected-content(\/[A-Za-z0-9_@.\/&amp;+-]+)+\.([A-Za-z0-9_@.\/&amp;+-]+)$" ignoreCase="false"/>
+          <action type="Rewrite" url="index.php?mlfp_bdp={R:1}&amp;block_access=true&amp;file_type={R:2}" appendQueryString="true"/>
+        </rule>
+        <!-- Block Direct Access End -->
+      </rules>
+    </rewrite>
+  </system.webServer>
+  <system.web>
+    <compilation debug="true"/>
+  </system.web>
+</configuration>
     
+
 = Media Library Folders Pro for WordPress =
 
 [Media Library Folders Pro for WordPress](https://www.maxgalleria.com/downloads/media-library-plus-pro/?utm_source=wordpress&utm_medium=mlfp&utm_content=mlpp&utm_campaign=repo) lets you:
@@ -197,6 +232,11 @@ Users can upload multiple files by using drag and drop. When the Add Files butto
 Because most images and files in the media library have corresponding links embedded in site’s posts and pages, Media Library Folders does not allow folders to be rename or moved in order to prevent breaking these links. Rather, to rename or move a folder, one needs to create a new folder and move the files from the old folder to the new. During the move process, Media Library Folders will scan the sites standard posts and pages for any links matching the old address of the images or files and update them to the new address.
 
 == Changelog ==
+= 8.3.2 =
+* Updated readme.txt for block direct access 
+* Added instructions for uninstalling the plugin
+* Tested with Wordpress 6.8
+
 = 8.3.1 =
 * Updated setting functions to allow updates only by administrators
 * Fixed issue with removing blocked IPs
