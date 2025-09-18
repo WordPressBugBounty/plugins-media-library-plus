@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.3.2
+Version: 8.3.3
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.2');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.3');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -246,7 +246,8 @@ class MGMediaLibraryFolders {
     add_action('wp_ajax_nopriv_mlp_load_folder', array($this, 'mlp_load_folder'));
     add_action('wp_ajax_mlp_load_folder', array($this, 'mlp_load_folder'));		
 						
-		add_action('wp_ajax_nopriv_mlp_display_folder_ajax', array($this, 'mlp_display_folder_contents_ajax'));
+		//add_action('wp_ajax_nopriv_mlp_display_folder_ajax', array($this, 'mlp_display_folder_contents_ajax'));
+    add_action('wp_ajax_nopriv_mlp_display_folder_contents_ajax', array($this, 'mlp_display_folder_contents_ajax'));
     add_action('wp_ajax_mlp_display_folder_contents_ajax', array($this, 'mlp_display_folder_contents_ajax'));		
 		
     add_action('wp_ajax_nopriv_mlp_display_folder_contents_images_ajax', array($this, 'mlp_display_folder_contents_images_ajax'));
@@ -1166,7 +1167,7 @@ public function get_parent_by_name($sub_folder) {
     }
 
 		// remove the extention from the file name
-		$position = strpos($title_text, '.');
+		$position = strrpos($title_text, '.');
 		if($position)
 			$title_text	= substr ($title_text, 0, $position);
 				
@@ -2292,7 +2293,9 @@ function process_mc_data(phase, folder_id, action_name, parent_folder, serial_co
         'post_date ASC',
         'post_date DESC',
         'LOWER(attached_file) ASC',
-        'LOWER(attached_file) DESC'
+        'LOWER(attached_file) DESC',
+        'LOWER(post_title) ASC',
+        'LOWER(post_title) DESC'
     );
     if (empty($order_by) || !in_array($order_by, $allowed_values)) {
         return 'post_date ASC';
@@ -2390,35 +2393,93 @@ $sql = $wpdb->prepare(
             if($rows) {
               $images_found = true;
               foreach($rows as $row) {
-								
-                if($row->block == 1) {
-                  if(($this->bda_user_role == 'admins' && $is_admin) || $this->bda_user_role == 'authors' && $current_user == $row->post_author) {
-                    if($current_user == $row->post_author)
-                      $author_class = 'author';
-                    else
-                      $author_class = '';
-                    if(wp_attachment_is_image($row->ID)) {
-                      $blocked_image_url = wp_get_attachment_thumb_url($row->ID);
-                    } else {  
-                      $ext = pathinfo($row->attached_file, PATHINFO_EXTENSION);
-                      $blocked_image_url = $this->get_file_thumbnail($ext);
-                      $image_file_type = false;                    
+                
+                if ( (int) $row->block === 1 ) {
+
+                    $is_author = ( get_current_user_id() === (int) $row->post_author );
+                    $can_view  = (
+                        ( $this->bda_user_role === 'admins'  && ! empty( $is_admin ) ) ||
+                        ( $this->bda_user_role === 'authors' && $is_author )
+                    );
+
+                    if ( $can_view ) {
+                        $author_class = $is_author ? 'author' : '';
+
+                        if ( wp_attachment_is_image( $row->ID ) ) {
+                            // Updated: use wp_get_attachment_image_url() which honors image sizes and is the modern API.
+                            $blocked_image_url = wp_get_attachment_image_url( $row->ID, 'thumbnail' );
+                        } else {
+                            // Get extension safely from the real file path.
+                            $filepath = get_attached_file( $row->ID );
+                            $ext      = $filepath ? pathinfo( $filepath, PATHINFO_EXTENSION ) : '';
+                            $blocked_image_url = $this->get_file_thumbnail( $ext );
+                            $image_file_type   = false;
+                        }
+                    } else {
+                        $blocked_image_url = '';
                     }
-                  } else {
-                    $blocked_image_url = '';
-                  }                  
+
                 } else {
-                  // use wp_get_attachment_image to get the PDF preview
-                  $thumbnail_html = "";
-                  $thumbnail_html = wp_get_attachment_image( $row->ID);
-                  if(!$thumbnail_html){
-                    $thumbnail = wp_get_attachment_thumb_url($row->ID);                
-                    if($thumbnail === false) {
-                      $thumbnail = esc_url(MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . "/images/file.jpg");
-                    }  
-                    $thumbnail_html = "<img alt='' src='$thumbnail' />";
-                  }
+
+                    // SAFE: normalize alt to a plain string to avoid PHP 8.3 strip_tags() fatal from arrays.
+                    $alt = $this->mgp_normalize_image_alt_meta( $row->ID );
+
+                    // Prefer the modern API; pass an explicit size and attributes.
+                    $thumbnail_html = wp_get_attachment_image(
+                        $row->ID,
+                        'thumbnail',
+                        false,
+                        array(
+                            'alt'   => $alt,
+                            'class' => 'mlp-thumb',
+                        )
+                    );
+
+                    // Fallback if no HTML returned (e.g., missing metadata or preview not generated)
+                    if ( empty( $thumbnail_html ) ) {
+                        $thumbnail = wp_get_attachment_image_url( $row->ID, 'thumbnail' );
+
+                        if ( empty( $thumbnail ) ) {
+                            $thumbnail = MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . '/images/file.jpg';
+                        }
+
+                        $thumbnail_html = sprintf(
+                            '<img alt="%s" src="%s" class="mlp-thumb" />',
+                            esc_attr( $alt ),
+                            esc_url( $thumbnail )
+                        );
+                    }
                 }
+                
+								
+//                 if($row->block == 1) {
+//                  if(($this->bda_user_role == 'admins' && $is_admin) || $this->bda_user_role == 'authors' && $current_user == $row->post_author) {
+//                    if($current_user == $row->post_author)
+//                      $author_class = 'author';
+//                    else
+//                      $author_class = '';
+//                    if(wp_attachment_is_image($row->ID)) {
+//                      $blocked_image_url = wp_get_attachment_thumb_url($row->ID);
+//                    } else {  
+//                      $ext = pathinfo($row->attached_file, PATHINFO_EXTENSION);
+//                      $blocked_image_url = $this->get_file_thumbnail($ext);
+//                      $image_file_type = false;                    
+//                    }
+//                  } else {
+//                    $blocked_image_url = '';
+//                  }                  
+//                } else {
+//                  // use wp_get_attachment_image to get the PDF preview
+//                  $thumbnail_html = "";
+//                  $thumbnail_html = wp_get_attachment_image( $row->ID);
+//                  if(!$thumbnail_html){
+//                    $thumbnail = wp_get_attachment_thumb_url($row->ID);                
+//                    if($thumbnail === false) {
+//                      $thumbnail = esc_url(MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . "/images/file.jpg");
+//                    }  
+//                    $thumbnail_html = "<img alt='' src='$thumbnail' />";
+//                  }
+//                }
                                 
                 $checkbox = sprintf("<input type='checkbox' class='mgmlp-media' id='%s' value='%s' protected='%s' />", $row->ID, $row->ID, $row->block );
 								if($image_link && $mif_visible)
@@ -2485,6 +2546,35 @@ $sql = $wpdb->prepare(
 		
 	}
   
+  /**
+   * Ensure _wp_attachment_image_alt is a scalar string.
+   * Returns the string that will be used, and updates the meta if it needed fixing.
+   */
+  public function mgp_normalize_image_alt_meta( $attachment_id ) {
+      $original_val = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
+      $val = $original_val;
+
+      if ( is_array( $val ) ) {
+          $flat = array_filter(
+              array_map( 'strval', $val ),
+              function( $s ) { return $s !== ''; }
+          );
+          $val = $flat ? reset( $flat ) : '';
+      } elseif ( ! is_string( $val ) ) {
+          $val = (string) $val;
+      }
+
+      $val = wp_strip_all_tags( $val, true );
+      $val = trim( $val );
+      $val = preg_replace( '/[^\P{C}\t\n\r]/u', '', $val );
+
+      if ( $original_val !== $val ) {
+          update_post_meta( $attachment_id, '_wp_attachment_image_alt', $val );
+      }
+
+      return $val;
+  }
+
   private function get_folder_path($folder_id) {
     
     global $wpdb;
@@ -5623,7 +5713,8 @@ and meta_key = '_wp_attached_file'";
 
       $new_attachment = $folder_path . DIRECTORY_SEPARATOR . $next_file;
       
-			$new_file_title = preg_replace( '/\.[^.]+$/', '', $next_file);	      
+			//$new_file_title = preg_replace( '/\.[^.]+$/', '', $next_file);	      
+      $new_file_title = preg_replace('/(\.[a-zA-Z0-9]+)$/', '', $next_file); // only remove the extention when several periods are in the name.
 
       $attach_id = $this->add_new_attachment($new_attachment, $parent_folder, $new_file_title, $mlp_alt_text, $mlp_title_text);
       
