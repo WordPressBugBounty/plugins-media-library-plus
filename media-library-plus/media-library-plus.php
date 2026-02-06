@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.3.3
+Version: 8.3.6
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.3');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.6');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -3058,7 +3058,7 @@ public function add_to_max_gallery () {
     
     global $wpdb, $maxgalleria;
     
-    if (!wp_verify_nonce($_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_PRO_NONCE)) {
+    if (!wp_verify_nonce($_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
       exit(__('missing nonce!', 'maxgalleria-media-library'));
     } 
     
@@ -3111,8 +3111,69 @@ public function add_to_max_gallery () {
     echo sprintf(__('%d images were added.', 'maxgalleria-media-library'), $images_added_count) . PHP_EOL;              
         
     die();
-  }      
+  } 
+  
+  public function add_image_to_mg_gallery($attachment_id, $gallery_id) {
     
+    global $wpdb, $maxgalleria;
+
+    $result = $attachment_id;
+
+    // check for image already in the gallery
+    $sql = "SELECT ID FROM $wpdb->prefix" . "posts where post_parent = $gallery_id and post_type = 'attachment' and ID = $attachment_id";
+
+    $row = $wpdb->get_row($sql);
+
+    if($row === null) {
+
+      $menu_order = $maxgalleria->common->get_next_menu_order($gallery_id);      
+
+      $attachment = get_post( $attachment_id, ARRAY_A );
+
+      // assign a new value for menu_order
+      //$menu_order = $maxgalleria->common->get_next_menu_order($gallery_id);
+      $attachment[ 'menu_order' ] = $menu_order;
+
+      //If the attachment doesn't have a post parent, simply change it to the attachment we're working with and be done with it      
+      // assign a new value for menu_order
+      if( empty( $attachment[ 'post_parent' ] ) ) {
+        wp_update_post(
+          array(
+            'ID' => $attachment[ 'ID' ],
+            'post_parent' => $gallery_id,
+            'menu_order' => $menu_order
+          )
+        );
+        $result = $attachment[ 'ID' ];
+      } else {
+        //Else, unset the attachment ID, change the post parent and insert a new attachment
+        unset( $attachment[ 'ID' ] );
+        $attachment[ 'post_parent' ] = $gallery_id;
+        $new_attachment_id = wp_insert_post( $attachment );
+        //$new_attachment_id = $this->mpmlp_insert_post( $attachment );
+
+        //Now, duplicate all the custom fields. (There's probably a better way to do this)
+        $custom_fields = get_post_custom( $attachment_id );
+
+        foreach( $custom_fields as $key => $value ) {
+          //The attachment metadata wasn't duplicating correctly so we do that below instead
+          if( $key != '_wp_attachment_metadata' )
+            update_post_meta( $new_attachment_id, $key, $value[0] );
+        }
+
+        //Carry over the attachment metadata
+        $data = wp_get_attachment_metadata( $attachment_id );
+        wp_update_attachment_metadata( $new_attachment_id, $data );
+
+        $result = $new_attachment_id;
+
+      }
+    }
+          
+    return $result;
+          
+  }
+      
   public function search_media () {
     
     global $wpdb;
@@ -4240,12 +4301,12 @@ and meta_key = '_wp_attached_file'";
             <ul>
               <li><span><?php esc_html_e('Add images to your posts and pages','maxgalleria-media-library') ?></span></li>
               <li><span><?php esc_html_e('File Name View Mode','maxgalleria-media-library') ?></span></li>
-              <li><span><?php esc_html_e('Thumbnail Management','maxgalleria-media-library') ?></span></li>							
+              <li><span><?php esc_html_e('Thumbnail Management','maxgalleria-media-library') ?></span></li>
+              <li><span><?php esc_html_e('Automatically convert uploaded JPG and PNG images to WebP format','maxgalleria-media-library') ?></span></li>              
               <li><span><?php esc_html_e('Add Images to WooCommerce Product Gallery','maxgalleria-media-library') ?></span></li>							
               <li><span><?php esc_html_e('Export the media library from one Wordpress site and import it into another','maxgalleria-media-library') ?></span></li>
               <li><span><?php esc_html_e('Front End Upload to a Specific Folder','maxgalleria-media-library') ?></span></li>							
               <li><span><?php esc_html_e('Bulk Move of media files','maxgalleria-media-library') ?></span></li>							
-              <li><span><?php esc_html_e('Supports Advanced Custom Fields','maxgalleria-media-library') ?></span></li>
               <li><span><?php esc_html_e('Organize Nextgen Galleries','maxgalleria-media-library') ?></span></li>
             </ul>
           </div>
@@ -4256,6 +4317,7 @@ and meta_key = '_wp_attached_file'";
               <li><span><?php esc_html_e('Embed PDF files in a page via a shortcode and Embed PDF file shortcode generator','maxgalleria-media-library') ?></span></li>							
               <li><span><?php esc_html_e('Media Library Maintenance and Bulk File Import','maxgalleria-media-library') ?></span></li>							
               <li><span><?php esc_html_e('Jetpack and the Wordpress Gallery Shortcode Generator','maxgalleria-media-library') ?></span></li>
+              <li><span><?php esc_html_e('Supports Advanced Custom Fields','maxgalleria-media-library') ?></span></li>
               <li><span><?php esc_html_e('Block Direct Access for Selected Files','maxgalleria-media-library') ?></span></li>
               <li><span><?php esc_html_e('AI-powered image generation','maxgalleria-media-library') ?></span></li>
             </ul>
@@ -4343,6 +4405,22 @@ and meta_key = '_wp_attached_file'";
       </div>
     </div>
     
+    <div class="option">
+      <div class="container">
+        <div class="row">
+          <div class="width-100">
+            <h4>
+              <?php esc_html_e('Automatically convert uploaded JPG and PNG images to WebP format','maxgalleria-media-library') ?>
+            </h4>
+            <p>
+              <?php esc_html_e('Automatically convert images to the modern WebP format for faster loading, smaller file sizes, and better website performance without any loss in quality.','maxgalleria-media-library') ?>
+            </p>
+            <img class="img-responsive" src="<?php echo esc_url(MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . "/images/assets/webp-mlfp-option.png") ?>" alt="img" />
+          </div>
+        </div>
+      </div>
+    </div>
+        
     <div class="option">
       <div class="container">
         <div class="row">
@@ -5054,7 +5132,7 @@ and meta_key = '_wp_attached_file'";
   
   public function mflp_enable_auto_protect() {
     
-    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_PRO_NONCE)) {
+    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
       exit(__('missing nonce!','maxgalleria-media-library'));
     }
     

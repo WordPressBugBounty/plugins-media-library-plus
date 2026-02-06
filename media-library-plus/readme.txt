@@ -2,8 +2,8 @@
 Contributors: maxfoundry, AlanP57
 Tags: media library folders, media library folders, organize media library
 Requires at least: 4.0
-Tested up to: 6.8.1
-Stable tag: 8.3.3
+Tested up to: 6.9
+Stable tag: 8.3.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -232,6 +232,15 @@ Users can upload multiple files by using drag and drop. When the Add Files butto
 Because most images and files in the media library have corresponding links embedded in site’s posts and pages, Media Library Folders does not allow folders to be rename or moved in order to prevent breaking these links. Rather, to rename or move a folder, one needs to create a new folder and move the files from the old folder to the new. During the move process, Media Library Folders will scan the sites standard posts and pages for any links matching the old address of the images or files and update them to the new address.
 
 == Changelog ==
+= 8.3.6 =
+* Tested with Wordpress 6.9
+
+= 8.3.5 =
+* Updated the upgrade to pro page
+
+= 8.3.4 =
+* Fixed issue with adding images to a MaxGallery gallery
+
 = 8.3.3 =
 * Added code to fix image alt data causing issues in PHP 8.3
 
