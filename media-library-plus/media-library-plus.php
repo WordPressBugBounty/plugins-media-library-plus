@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.3.7
+Version: 8.3.8
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.7');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.8');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -490,7 +490,7 @@ class MGMediaLibraryFolders {
   /* manually load image on the front end of the site */
   public function mlfp_load_fe_image () {
     
-    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
+    if ( !wp_verify_nonce( $_POST['nonce'], MLFP_LOAD_IMAGE_NONCE)) {
       exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
     }
     
@@ -6767,74 +6767,151 @@ AND meta_key = '_wp_attached_file'";
   public function update_elementor_data($image_id, $replace_image_location, $replace_destination_url) {
     
     global $wpdb;
-    $save = false;
     
     $base_file_name = basename($replace_image_location);
     
-    $sql = "select post_id, meta_id, meta_value from {$wpdb->prefix}postmeta where meta_key = '_elementor_data' and meta_value like '%$base_file_name%'";
+    $sql = $wpdb->prepare(
+      "select post_id, meta_id, meta_value from {$wpdb->prefix}postmeta where meta_key = '_elementor_data' and meta_value like %s",
+      '%' . $wpdb->esc_like($base_file_name) . '%'
+    );
     
     $rows = $wpdb->get_results($sql);
+
     if($rows) {
       foreach($rows as $row) {
+        $save = false;
+        $saved = false;
+        $jarrays = null;
+        $data_format = '';
         
         // check for serialized data
         $data = @unserialize($row->meta_value);
-        if($data === false)
+        if($data === false) {
+          $data_format = 'json';
           $jarrays = json_decode($row->meta_value, true);
-        else {
+        } else {
+          $data_format = 'serialized';
           $jarrays = $data; 
         }
         
         if(is_array($jarrays)) {          
           foreach($jarrays as &$jarray) {
-            if($this->search_elementor_array($image_id, $jarray, $replace_image_location, $replace_destination_url, $row->post_id))
+            if($this->search_elementor_array($image_id, $jarray, $replace_image_location, $replace_destination_url, $row->post_id)) {
               $save = true;
+            }
           }
-        } else {
-            //error_log("is not an array");
         }
+
         if($save) {
-          update_post_meta($row->post_id, '_elementor_data', $jarrays);
+          if($data_format === 'json') {
+            $meta_value = wp_json_encode($jarrays);
+            $updated = $wpdb->update(
+              $wpdb->postmeta,
+              array('meta_value' => $meta_value),
+              array('meta_id' => $row->meta_id),
+              array('%s'),
+              array('%d')
+            );
+            wp_cache_delete($row->post_id, 'post_meta');
+          } else {
+            $meta_value = $jarrays;
+            $updated = update_post_meta($row->post_id, '_elementor_data', $meta_value);
+          }
+          $saved = ($updated !== false);
         }
         $this->update_elemenator_css_file($row->post_id, $replace_image_location, $replace_destination_url);
+        if($saved) {
+          $this->clear_elementor_post_generated_data($row->post_id);
+        }
       }
     }
+  }
+
+  public function clear_elementor_post_generated_data($post_id) {
+
+    delete_post_meta($post_id, '_elementor_css');
+    delete_post_meta($post_id, '_elementor_element_cache');
+    delete_post_meta($post_id, '_elementor_page_assets');
+
+    if(class_exists('\Elementor\Core\Files\CSS\Post')) {
+      try {
+        $post_css = new \Elementor\Core\Files\CSS\Post($post_id);
+        $post_css->delete();
+      } catch(\Throwable $exception) {
+        // Elementor cache cleanup is best-effort; the meta update above is already complete.
+      }
+    }
+
+    clean_post_cache($post_id);
   }
 
   public function search_elementor_array($image_id, &$jarray, $replace_image_location, $replace_destination_url, $post_id) {
   
     $save = false;
+    if(!is_array($jarray)) {
+      return $save;
+    }
+
+    $destination_url_without_extension = $this->get_base_file($replace_destination_url);
+
+    if(array_key_exists('id', $jarray) && (string) $jarray['id'] === (string) $image_id && array_key_exists('url', $jarray) && is_string($jarray['url'])) {
+      $jarray['url'] = $replace_destination_url;
+      $save = true;
+    }
+
+    foreach($jarray as $key => &$value) {
+      if(is_array($value)) {
+        if($this->search_elementor_array($image_id, $value, $replace_image_location, $replace_destination_url, $post_id)) {
+          $save = true;
+        }
+      } else if(is_string($value) && strpos($value, $replace_image_location) !== false) {
+        $value = str_replace($replace_image_location, $destination_url_without_extension, $value);
+        $save = true;
+      }
+    }
+    unset($value);
+
     if(array_key_exists('settings', $jarray)) {
-      if($jarray['settings'] !== null) { // Add null check here
+      if(is_array($jarray['settings'])) {
         if(array_key_exists('background_background', $jarray['settings'])) {
           if($jarray['settings']['background_background'] == 'classic') {
-            if(array_key_exists('id', $jarray['settings']['background_image'])) {
+            if(array_key_exists('background_image', $jarray['settings']) && is_array($jarray['settings']['background_image']) && array_key_exists('id', $jarray['settings']['background_image'])) {
               if($jarray['settings']['background_image']['id'] == $image_id) {
                 $jarray['settings']['background_image']['url'] = $replace_destination_url;
                 $save = true;              
               }              
             }          
           }        
-        }        
+        }
       }
-    }    
+    }
+
+    return $save;
   }  
   
   public function search_elementor_array1($image_id, &$jarray, $replace_image_location, $replace_destination_url, $post_id) {
     
     $save = false;
-    if(array_key_exists('settings', $jarray)) {
-      if(array_key_exists('background_background', $jarray['settings'])) {
-        if($jarray['settings']['background_background'] == 'classic') {
-          if(array_key_exists('id', $jarray['settings']['background_image'])) {
-            if($jarray['settings']['background_image']['id'] == $image_id) {
-              $jarray['settings']['background_image']['url'] = $replace_destination_url;
-              $save = true;              
-            }              
-          }          
-        }        
+
+    if(!is_array($jarray)) {
+      return $save;
+    }
+
+    if(array_key_exists('settings', $jarray) && is_array($jarray['settings'])) {
+      if(array_key_exists('background_background', $jarray['settings']) && $jarray['settings']['background_background'] == 'classic') {
+        if(
+          array_key_exists('background_image', $jarray['settings'])
+          && is_array($jarray['settings']['background_image'])
+          && array_key_exists('id', $jarray['settings']['background_image'])
+          && $jarray['settings']['background_image']['id'] == $image_id
+        ) {
+          $jarray['settings']['background_image']['url'] = $replace_destination_url;
+          $save = true;              
+        }
       }
-    }    
+    }
+
+    return $save;
   }
   
   public function update_elemenator_css_file($post_id, $replace_image_location, $replace_destination_url) {
@@ -6844,10 +6921,14 @@ AND meta_key = '_wp_attached_file'";
     $position = strrpos($replace_destination_url, '.');
     
     $url_without_extension = substr($replace_destination_url, 0, $position);
-    
+
     if(file_exists($css_file_path)) {
         
       $css = file_get_contents($css_file_path);
+
+      if($css === false) {
+        return;
+      }
 
       $css = str_replace($replace_image_location, $url_without_extension, $css);
 
