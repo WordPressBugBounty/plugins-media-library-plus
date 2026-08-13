@@ -32,7 +32,7 @@ if (! function_exists('get_file_attachment_id')) {
 	function get_file_attachment_id($pathname) {
 		global $wpdb;
 		$uploads = wp_get_upload_dir();
-		$uploads = rtrim($uploads['basedir'], DIRECTORY_SEPARATOR) .  DIRECTORY_SEPARATOR;
+		$uploads = rtrim($uploads['basedir'], DIRECTORY_SEPARATOR);
 
 		// first, determine full path
 		if (file_exists($pathname)) {
@@ -55,8 +55,16 @@ if (! function_exists('get_file_attachment_id')) {
 
 		// second, ensure file lives in uploads & get path relative to uploads
 		$fullpath = realpath($fullpath);
-		if (str_begins_with($fullpath, $uploads)) {
-			$subpath = substr($fullpath, strlen($uploads));
+		$real_uploads = realpath($uploads);
+		if ($fullpath === false || $real_uploads === false) {
+			return;
+		}
+
+		$fullpath = rtrim($fullpath, DIRECTORY_SEPARATOR);
+		$real_uploads = rtrim($real_uploads, DIRECTORY_SEPARATOR);
+		if ($fullpath === $real_uploads || str_begins_with($fullpath, $real_uploads . DIRECTORY_SEPARATOR)) {
+			$subpath = $fullpath === $real_uploads ? '' : substr($fullpath, strlen($real_uploads) + 1);
+			$subpath = str_replace(DIRECTORY_SEPARATOR, '/', $subpath);
 		} else {
 			// $pathname isn't an upload
 			return;

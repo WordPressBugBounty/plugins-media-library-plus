@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.3.8
+Version: 8.3.9
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.8');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.9');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -483,9 +483,11 @@ class MGMediaLibraryFolders {
         return false;
     }
 
-    // Use the strncmp function to compare the first n characters of two strings
-    return strncmp($child_path, $parent_path, strlen($parent_path)) === 0;
-}
+    $parent_path = rtrim($parent_path, DIRECTORY_SEPARATOR);
+    $child_path = rtrim($child_path, DIRECTORY_SEPARATOR);
+
+    return $child_path === $parent_path || strpos($child_path, $parent_path . DIRECTORY_SEPARATOR) === 0;
+  }
       
   /* manually load image on the front end of the site */
   public function mlfp_load_fe_image () {
@@ -2725,9 +2727,17 @@ AND meta_key = '_wp_attached_file'", $parent_folder_id);
     // Validate up to the parent directory
     $parent_dir = dirname($new_folder_path);        
     $real_parent_dir = realpath($parent_dir);
+    $real_allowed_dir = realpath($allowed_dir);
 
     // Check if the parent directory exists and is within the allowed directory
-    if (!$real_parent_dir || strpos($real_parent_dir, rtrim($allowed_dir, DIRECTORY_SEPARATOR)) !== 0) {  
+    if (
+      false === $real_parent_dir ||
+      false === $real_allowed_dir ||
+      (
+        $real_parent_dir !== $real_allowed_dir &&
+        strpos($real_parent_dir, $real_allowed_dir . DIRECTORY_SEPARATOR) !== 0
+      )
+    ) {  
         $message = esc_html__('Directory traversal attempt detected.', 'maxgalleria-media-library');
         $data = array('message' => esc_html($message), 'refresh' => false);
         echo json_encode($data);
@@ -4807,6 +4817,7 @@ and meta_key = '_wp_attached_file'";
               <li><span><?php esc_html_e('Supports Advanced Custom Fields','maxgalleria-media-library') ?></span></li>
               <li><span><?php esc_html_e('Block Direct Access for Selected Files','maxgalleria-media-library') ?></span></li>
               <li><span><?php esc_html_e('AI-powered image generation','maxgalleria-media-library') ?></span></li>
+              <li><span><?php esc_html_e('Shared Media Library for Multisites','maxgalleria-media-library') ?></span></li>
             </ul>
           </div>
           <div class="mlf-clearfix"></div>
@@ -5059,6 +5070,22 @@ and meta_key = '_wp_attached_file'";
               <?php esc_html_e('Use Media Library Folders Pro\'s playlist shortcode generator to create your own audio or video playlists.','maxgalleria-media-library') ?>
             </p>
             <img class="img-responsive" src="<?php echo esc_url(MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . "/images/assets/audio-playlist-generator.png") ?>" alt="img" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="option">
+      <div class="container">
+        <div class="row">
+          <div class="width-100">
+            <h4>
+             <?php esc_html_e('Network Media Library for Multisites','maxgalleria-media-library') ?>
+            </h4>
+            <p>
+              <?php esc_html_e('Media Library Folders Pro can now support a shared media library across a WordPress multisite network, allowing selected sites to browse, upload, insert, and organize files from one central media site. This makes it easier to manage common assets across multiple sites while preserving folder organization and Media Library Folders Pro workflows.','maxgalleria-media-library') ?>
+            </p>
+            <img class="img-responsive" src="<?php echo esc_url(MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_URL . "/images/assets/network-media-library.png") ?>" alt="img" />
           </div>
         </div>
       </div>
