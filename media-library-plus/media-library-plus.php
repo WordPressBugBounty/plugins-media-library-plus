@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.4.0
+Version: 8.4.1
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.0');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.1');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -1090,20 +1090,21 @@ public function get_parent_by_name($sub_folder) {
       } else {
 
 
-        if(!defined('ALLOW_UNFILTERED_UPLOADS')) {  
-          $wp_filetype = wp_check_filetype_and_ext($_FILES['file']['tmp_name'], $_FILES['file']['name'] );
+        // Match Core: defining ALLOW_UNFILTERED_UPLOADS alone never grants permission.
+        $wp_filetype = wp_check_filetype_and_ext( $_FILES['file']['tmp_name'], $_FILES['file']['name'] );
+        if ( ( empty( $wp_filetype['ext'] ) || empty( $wp_filetype['type'] ) ) && ! current_user_can( 'unfiltered_upload' ) ) {
+          $message = $_FILES['file']['name'] . __( " file's type is invalid.", 'maxgalleria-media-library' );
+          ?>
+          <script>
+          jQuery("#folder-message").empty().append(jQuery("<span>").addClass("mlp-warning").text(<?php echo wp_json_encode( $message, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ); ?>));
+          </script>
+          <?php
+          exit;
+        }
 
-          //error_log(print_r($wp_filetype,true));
-
-          if ($wp_filetype['ext'] === false) {
-            ?>
-            <script>
-            jQuery("#folder-message").html("<span class='mlp-warning'><?php echo esc_html($_FILES['file']['name'] . esc_html__(' file\'s type is invalid.', 'maxgalleria-media-library')); ?></span>");
-            </script>
-            <?php            
-            exit;
-          }
-        }  
+        if ( ! empty( $wp_filetype['proper_filename'] ) ) {
+          $_FILES['file']['name'] = $wp_filetype['proper_filename'];
+        }
 
         // insure it has a unique name
         $title_text = $_FILES['file']['name'];    
