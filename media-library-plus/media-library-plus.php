@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.3.9
+Version: 8.4.0
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.3.9');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.0');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -192,6 +192,7 @@ class MGMediaLibraryFolders {
     add_action('init', array($this, 'get_upload_status'));
 
 	  add_action('admin_init', array($this, 'ignore_notice'));
+    //add_action('admin_init', array($this, 'show_mlp_admin_notice'));
     
 		add_action('admin_print_styles', array($this, 'enqueue_admin_print_styles'));
 		add_action('admin_print_scripts', array($this, 'enqueue_admin_print_scripts'));
@@ -829,6 +830,21 @@ class MGMediaLibraryFolders {
     add_submenu_page('mlf-folders8', esc_html__('Support','maxgalleria-media-library'), esc_html__('Support','maxgalleria-media-library'), 'manage_options', 'mlf-support8', array($this, 'mlfp_support'));
     add_submenu_page('mlf-folders8', esc_html__('Upgrade to Pro','maxgalleria-media-library'), esc_html__('Upgrade to Pro','maxgalleria-media-library'), 'upload_files', 'mlp-upgrade-to-pro', array($this, 'mlp_upgrade_to_pro'));		    
     add_submenu_page('not-visible', esc_html__('Search Library','maxgalleria-media-library'), esc_html__('Search Library','maxgalleria-media-library'), 'upload_files', 'search-library', array($this, 'search_library'));
+
+    $notice_actions = array(
+      'mlp-review-notice'  => 'mlp_set_review_notice_true',
+      'mlp-feature-notice' => 'mlp_set_feature_notice_true',
+      'mlp-review-later'   => 'mlp_set_review_later',
+    );
+
+    foreach ( $notice_actions as $menu_slug => $method ) {
+      $callback = array( $this, $method );
+      $hook = add_submenu_page( 'not-visible', '', '', 'upload_files', $menu_slug, $callback );
+      if ( $hook ) {
+        // Process the action before WordPress outputs the admin header.
+        add_action( 'load-' . $hook, $callback );
+      }
+    }
   }  
   
   public function mlf_folders() {
@@ -1555,60 +1571,54 @@ and pm.meta_key = '_wp_attached_file'";
 			global $current_user;
 			
 			if (isset($_GET['maxgalleria-media-library-ignore-notice']) && $_GET['maxgalleria-media-library-ignore-notice'] == 1) {
+				check_admin_referer( 'maxgalleria-media-library-ignore-notice' );
 				add_user_meta($current_user->ID, MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE, true, true);
 			}
 		}
 	}
 
-	public function show_mlp_admin_notice() {
-    global $current_user;  
-    
-    if(isset($_REQUEST['page'])) {
-          
-      if($_REQUEST['page'] == 'media-library-folders' 
-          || $_REQUEST['page'] === 'mlf-support8' 
-          || $_REQUEST['page'] === 'mlf-settings8' 
-          || $_REQUEST['page'] === 'mlf-image-seo' 
-          || $_REQUEST['page'] === 'mlf-thumbnails' 
-          || $_REQUEST['page'] === 'search-library' ) {
-
-        
-        $features = get_user_meta( $current_user->ID, MAXGALLERIA_MLP_FEATURE_NOTICE, true );
-        $review = get_user_meta( $current_user->ID, MAXGALLERIA_MLP_REVIEW_NOTICE, true );
-        if( $review !== 'off' || $features !== 'off') {
-          if($features === '') {
-            $features_date = date('Y-m-d', strtotime("+30 days"));        
-            update_user_meta( $current_user->ID, MAXGALLERIA_MLP_FEATURE_NOTICE, $features_date );
-          }
-          if($review === '') {
-            //show review notice after three days
-            $review_date = date('Y-m-d', strtotime("+3 days"));        
-            update_user_meta( $current_user->ID, MAXGALLERIA_MLP_REVIEW_NOTICE, $review_date );
-
-            //show notice if not found
-            //add_action( 'admin_notices', array($this, 'mlp_review_notice' ));            
-          } else if( $review !== 'off') {
-            $now = date("Y-m-d"); 
-            $review_time = strtotime($review);
-            $features_time = strtotime($features);
-            $now_time = strtotime($now);
-            
-            if($now_time > $features_time && $features !== 'off')
-              add_action( 'admin_notices', array($this, 'mlp_features_notice' ));            
-            else if($now_time > $review_time)
-              add_action( 'admin_notices', array($this, 'mlp_review_notice' ));
-          } else if( $features !== 'off') {
-            $now = date("Y-m-d"); 
-            $features_time = strtotime($features);
-            $now_time = strtotime($now);
-            if($now_time > $features_time && $features !== 'off')
-              add_action( 'admin_notices', array($this, 'mlp_features_notice' ));                        
-          }
-        }
-      }
+  public function show_mlp_admin_notice() {
+    if ( ! current_user_can( 'upload_files' ) ) {
+      return;
     }
-	}
-  
+
+    $notice_pages = array(
+      'mlf-folders8',
+      'media-library-folders',
+      'mlf-support8',
+      'mlf-settings8',
+      'mlf-image-seo',
+      'mlf-thumbnails',
+      'search-library',
+    );
+    if ( ! isset( $_GET['page'] ) || ! in_array( $_GET['page'], $notice_pages, true ) ) {
+      return;
+    }
+
+    $user_id = get_current_user_id();
+    $features = get_user_meta( $user_id, MAXGALLERIA_MLP_FEATURE_NOTICE, true );
+    $review = get_user_meta( $user_id, MAXGALLERIA_MLP_REVIEW_NOTICE, true );
+
+    if ( $features === '' || $features === null ) {
+      $features = date( 'Y-m-d', strtotime( '+30 days' ) );
+      update_user_meta( $user_id, MAXGALLERIA_MLP_FEATURE_NOTICE, $features );
+    }
+    if ( $review === '' || $review === null ) {
+      $review = date( 'Y-m-d', strtotime( '+3 days' ) );
+      update_user_meta( $user_id, MAXGALLERIA_MLP_REVIEW_NOTICE, $review );
+    }
+
+    $today = strtotime( date( 'Y-m-d' ) );
+    $features_time = $features !== 'off' ? strtotime( $features ) : false;
+    $review_time = $review !== 'off' ? strtotime( $review ) : false;
+
+    if ( $features_time !== false && $features_time <= $today ) {
+      add_action( 'admin_notices', array( $this, 'mlp_features_notice' ) );
+    } elseif ( $review_time !== false && $review_time <= $today ) {
+      add_action( 'admin_notices', array( $this, 'mlp_review_notice' ) );
+    }
+  }
+
   /* if no upload fold id, check the folder table */
   private function fetch_uploads_folder_id() {
     global $wpdb;
@@ -4437,72 +4447,64 @@ and pm.meta_key = '_wp_attached_file'";
   }
   
   public function mlp_set_review_notice_true() {
-    
-    $current_user_id = get_current_user_id(); 
-    
-    update_user_meta( $current_user_id, MAXGALLERIA_MLP_REVIEW_NOTICE, "off" );
-        
-    $request = sanitize_url($_SERVER["HTTP_REFERER"]);
-    
-    echo "<script>window.location.href = '" . esc_url_raw($request) . "'</script>";             
-    
-    
-	}
-  
+    $this->update_mlp_notice( 'mlp-review-notice', MAXGALLERIA_MLP_REVIEW_NOTICE, 'off' );
+  }
+
   public function mlp_set_feature_notice_true() {
-    
-    $current_user_id = get_current_user_id(); 
-    
-    update_user_meta( $current_user_id, MAXGALLERIA_MLP_FEATURE_NOTICE, "off" );
-    
-    $request = sanitize_url($_SERVER["HTTP_REFERER"]);
-    
-    echo "<script>window.location.href = '" . esc_url_raw($request) . "'</script>";             
-    
-	}
-    
-	public function mlp_set_review_later() {
-    
-    $current_user_id = get_current_user_id(); 
-    
-    $review_date = date('Y-m-d', strtotime("+14 days"));
-        
-    update_user_meta( $current_user_id, MAXGALLERIA_MLP_REVIEW_NOTICE, $review_date );
-    
-    $request = sanitize_url($_SERVER["HTTP_REFERER"]);
-    
-    echo "<script>window.location.href = '" . esc_url_raw($request) . "'</script>";             
-    
-	}
-  
+    $this->update_mlp_notice( 'mlp-feature-notice', MAXGALLERIA_MLP_FEATURE_NOTICE, 'off' );
+  }
+
+  public function mlp_set_review_later() {
+    $review_date = date( 'Y-m-d', strtotime( '+14 days' ) );
+    $this->update_mlp_notice( 'mlp-review-later', MAXGALLERIA_MLP_REVIEW_NOTICE, $review_date );
+  }
+
+  private function update_mlp_notice( $action, $meta_key, $value ) {
+    if ( ! current_user_can( 'upload_files' ) ) {
+      wp_die( esc_html__( 'You do not have permission to change this notice.', 'maxgalleria-media-library' ), '', array( 'response' => 403 ) );
+    }
+
+    check_admin_referer( $action );
+    update_user_meta( get_current_user_id(), $meta_key, $value );
+
+    // Never use the request Referer as script content or a redirect destination.
+    wp_safe_redirect( admin_url( 'admin.php?page=mlf-folders8' ) );
+    exit;
+  }
+
   public function mlp_features_notice() {
-    if( current_user_can( 'upload_files' ) ) {  ?>
+    if( current_user_can( 'upload_files' ) ) {
+      $dismiss_url = wp_nonce_url( admin_url( 'admin.php?page=mlp-feature-notice' ), 'mlp-feature-notice' );
+      ?>
       <div class="updated notice maxgalleria-mlp-notice">         
         <div id='mlp_logo'></div>
         <div id='maxgalleria-mlp-notice-3'><p id='mlp-notice-title'><?php esc_html_e('Is there a feature you would like for us to add to', 'maxgalleria-media-library' ); ?><br><?php esc_html_e('Media Library Folders Pro? Let us know.', 'maxgalleria-media-library' ); ?></p>
         <p><?php esc_html_e('Send your suggestions to', 'maxgalleria-media-library' ); ?> <a href="mailto:support@maxfoundry.com">support@maxfoundry.com</a>.</p>
 
         </div>
-        <a class="dashicons dashicons-dismiss close-mlp-notice" href="<?php echo esc_url_raw(admin_url() . "admin.php?page=mlp-feature-notice") ?>"></a>          
+        <a class="dashicons dashicons-dismiss close-mlp-notice" href="<?php echo esc_url( $dismiss_url ) ?>"></a>
       </div>
     <?php     
     }
   }
   
   public function mlp_review_notice() {
-    if( current_user_can( 'upload_files' ) ) {  ?>
+    if( current_user_can( 'upload_files' ) ) {
+      $dismiss_url = wp_nonce_url( admin_url( 'admin.php?page=mlp-review-notice' ), 'mlp-review-notice' );
+      $later_url = wp_nonce_url( admin_url( 'admin.php?page=mlp-review-later' ), 'mlp-review-later' );
+      ?>
       <div class="updated notice maxgalleria-mlp-notice">         
         <div id='mlp_logo'></div>
         <div id='maxgalleria-mlp-notice-3'><p id='mlp-notice-title'><?php esc_html_e( 'Rate us Please!', 'maxgalleria-media-library' ); ?></p>
         <p><?php esc_html_e( 'Your rating is the simplest way to support Media Library Folders Pro. We really appreciate it!', 'maxgalleria-media-library' ); ?></p>
 
         <ul id="mlp-review-notice-links">
-          <li> <span class="dashicons dashicons-smiley"></span><a href="<?php echo esc_url_raw( admin_url() . "admin.php?page=mlp-review-notice") ?>"><?php esc_html_e( "I've already left a review", "maxgalleria-media-library" ); ?></a></li>
-          <li><span class="dashicons dashicons-calendar-alt"></span><a href="<?php echo esc_url_raw( admin_url() . "admin.php?page=mlp-review-later") ?>"><?php esc_html_e( "Maybe Later", "maxgalleria-media-library" ); ?></a></li>
+          <li> <span class="dashicons dashicons-smiley"></span><a href="<?php echo esc_url( $dismiss_url ) ?>"><?php esc_html_e( "I've already left a review", "maxgalleria-media-library" ); ?></a></li>
+          <li><span class="dashicons dashicons-calendar-alt"></span><a href="<?php echo esc_url( $later_url ) ?>"><?php esc_html_e( "Maybe Later", "maxgalleria-media-library" ); ?></a></li>
           <li><span class="dashicons dashicons-external"></span><a target="_blank" href="https://wordpress.org/support/plugin/media-library-plus/reviews/?filter=5"><?php esc_html_e( "Sure! I'd love to!", "maxgalleria-media-library" ); ?></a></li>
         </ul>
         </div>
-        <a class="dashicons dashicons-dismiss close-mlp-notice" href="<?php echo esc_url_raw( admin_url() . "admin.php?page=mlp-review-notice") ?>"></a>          
+        <a class="dashicons dashicons-dismiss close-mlp-notice" href="<?php echo esc_url( $dismiss_url ) ?>"></a>
       </div>
     <?php     
     }
