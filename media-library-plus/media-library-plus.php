@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.4.1
+Version: 8.4.2
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.1');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.2');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -6814,14 +6814,36 @@ AND meta_key = '_wp_attached_file'";
         $jarrays = null;
         $data_format = '';
         
-        // check for serialized data
-        $data = @unserialize($row->meta_value);
-        if($data === false) {
+        // Elementor stores JSON. Only decode legacy serialized arrays, without classes.
+        $jarrays = json_decode( $row->meta_value, true );
+        if ( JSON_ERROR_NONE === json_last_error() ) {
           $data_format = 'json';
-          $jarrays = json_decode($row->meta_value, true);
-        } else {
+        } elseif ( strncmp( $row->meta_value, 'a:', 2 ) === 0 ) {
+          try {
+            $jarrays = @unserialize( $row->meta_value, array( 'allowed_classes' => false ) );
+          } catch ( Throwable $error ) {
+            continue;
+          }
+
+          if ( ! is_array( $jarrays ) ) {
+            continue;
+          }
+
+          $has_object = false;
+          try {
+            array_walk_recursive( $jarrays, function ( $value ) use ( &$has_object ) {
+              if ( is_object( $value ) ) {
+                $has_object = true;
+              }
+            } );
+          } catch ( Throwable $error ) {
+            continue;
+          }
+          if ( $has_object ) {
+            continue;
+          }
+
           $data_format = 'serialized';
-          $jarrays = $data; 
         }
         
         if(is_array($jarrays)) {          
@@ -6835,6 +6857,9 @@ AND meta_key = '_wp_attached_file'";
         if($save) {
           if($data_format === 'json') {
             $meta_value = wp_json_encode($jarrays);
+            if ( false === $meta_value ) {
+              continue;
+            }
             $updated = $wpdb->update(
               $wpdb->postmeta,
               array('meta_value' => $meta_value),
@@ -6842,10 +6867,24 @@ AND meta_key = '_wp_attached_file'";
               array('%s'),
               array('%d')
             );
-            wp_cache_delete($row->post_id, 'post_meta');
+            if ( false !== $updated ) {
+              wp_cache_delete($row->post_id, 'post_meta');
+            }
           } else {
-            $meta_value = $jarrays;
-            $updated = update_post_meta($row->post_id, '_elementor_data', $meta_value);
+            if ( function_exists( 'update_metadata_by_mid' ) ) {
+              $updated = update_metadata_by_mid( 'post', $row->meta_id, $jarrays );
+            } else {
+              $updated = $wpdb->update(
+                $wpdb->postmeta,
+                array( 'meta_value' => serialize( $jarrays ) ),
+                array( 'meta_id' => $row->meta_id ),
+                array( '%s' ),
+                array( '%d' )
+              );
+              if ( false !== $updated ) {
+                wp_cache_delete( $row->post_id, 'post_meta' );
+              }
+            }
           }
           $saved = ($updated !== false);
         }
@@ -7054,43 +7093,83 @@ AND meta_key = '_wp_attached_file'";
   }  
   
   public function update_serial_postmeta_records($replace_image_location, $replace_destination_url) {
-    
     global $wpdb;
-    
-    // = instead oflike?   
-    $sql = "SELECT * FROM {$wpdb->prefix}postmeta WHERE meta_key = 'panels_data' and meta_value like '%$replace_image_location%'";
-    
-    $widgets = array('text','content','url','mp4','m4v','webm','ogv','flv');
+    $like = '%' . $wpdb->esc_like( $replace_image_location ) . '%';
+    $sql = $wpdb->prepare(
+      "SELECT meta_id, post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value LIKE %s",
+      'panels_data',
+      $like
+    );
+    $widgets = array( 'text', 'content', 'url', 'mp4', 'm4v', 'webm', 'ogv', 'flv' );
 
-    $records = $wpdb->get_results($sql);
-    foreach($records as $record) {
-                  
-      $data = unserialize($record->meta_value);
-      
-      if (isset($data['widgets']) && is_array($data['widgets'])) {
-        
-        for ($index = 0; $index < count($data['widgets']); $index++) {  
-          
-          foreach($widgets as $widget) {
-            
-            if(isset($data['widgets'][$index][$widget])) {
-              
-              if(is_string($data['widgets'][$index][$widget])) {
-                $text = $data['widgets'][$index][$widget];
-                //error_log("$widget: $text");
-                $data['widgets'][$index][$widget] = str_replace($replace_image_location, $replace_destination_url, $text);
-                //error_log($data['widgets'][$index][$widget]);
-              }
-            }
-            
-          }
-          
-        }
-        
+    foreach ( $wpdb->get_results( $sql ) as $record ) {
+      // SiteOrigin stores an array. Reject other serialized types before decoding.
+      if ( ! is_string( $record->meta_value ) || strncmp( $record->meta_value, 'a:', 2 ) !== 0 ) {
+        continue;
       }
-            
-		  update_post_meta($record->post_id, $record->meta_key, $data);												      
-    }        
+
+      try {
+        $data = @unserialize( $record->meta_value, array( 'allowed_classes' => false ) );
+      } catch ( Throwable $error ) {
+        continue;
+      }
+
+      if ( ! is_array( $data ) || ! isset( $data['widgets'] ) || ! is_array( $data['widgets'] ) ) {
+        continue;
+      }
+
+      // Do not write incomplete objects back into post meta after decoding.
+      $has_object = false;
+      try {
+        array_walk_recursive( $data, function ( $value ) use ( &$has_object ) {
+          if ( is_object( $value ) ) {
+            $has_object = true;
+          }
+        } );
+      } catch ( Throwable $error ) {
+        continue;
+      }
+      if ( $has_object ) {
+        continue;
+      }
+
+      $changed = false;
+      foreach ( $data['widgets'] as &$widget_data ) {
+        if ( ! is_array( $widget_data ) ) {
+          continue;
+        }
+
+        foreach ( $widgets as $widget ) {
+          if ( ! isset( $widget_data[$widget] ) || ! is_string( $widget_data[$widget] ) ) {
+            continue;
+          }
+
+          $updated = str_replace( $replace_image_location, $replace_destination_url, $widget_data[$widget] );
+          if ( $updated !== $widget_data[$widget] ) {
+            $widget_data[$widget] = $updated;
+            $changed = true;
+          }
+        }
+      }
+      unset( $widget_data );
+
+      if ( $changed ) {
+        if ( function_exists( 'update_metadata_by_mid' ) ) {
+          update_metadata_by_mid( 'post', $record->meta_id, $data );
+        } else {
+          $updated = $wpdb->update(
+            $wpdb->postmeta,
+            array( 'meta_value' => serialize( $data ) ),
+            array( 'meta_id' => $record->meta_id ),
+            array( '%s' ),
+            array( '%d' )
+          );
+          if ( false !== $updated ) {
+            wp_cache_delete( $record->post_id, 'post_meta' );
+          }
+        }
+      }
+    }
   }
   
   public function get_ajax_paramater($parameter_name, $default = '') {
