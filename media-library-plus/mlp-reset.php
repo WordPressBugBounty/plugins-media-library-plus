@@ -5,7 +5,7 @@ Plugin URI: https://maxgalleria.com
 Description: Plugin for reseting Media Library Folders
 Author: Max Foundry
 Author URI: https://maxfoundry.com
-Version: 8.4.2
+Version: 8.4.3
 Copyright 2015-2021 Max Foundry, LLC (https://maxfoundry.com)
 Text Domain: mlp-reset
 */
@@ -57,7 +57,9 @@ add_action('init', 'mlfr_get_upload_status');
 
 function mlfr_get_upload_status() {
   $data = get_userdata(get_current_user_id());
-}  
+}
+
+add_filter( 'wp_kses_force_legacy_parser', '__return_true' );
 
 function mlp_reset_menu() {
   add_menu_page(esc_html__('Media Library Folders Reset','mlp-reset'), esc_html__('Media Library Folders Reset','mlp-reset'), 'manage_options', 'mlp-reset', 'mlp_reset' );

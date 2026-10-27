@@ -3,11 +3,11 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.4.2
+Version: 8.4.3
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
-Copyright 2015-2022 Max Foundry, LLC (https://maxfoundry.com)
+Copyright 2015-2026 Max Foundry, LLC (https://maxfoundry.com)
 */
 
 if(defined('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY')) {
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.2');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.3');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -1475,16 +1475,19 @@ ORDER by ID";
     return array();
   }  
   
+  private function get_normalized_folder_relative_path($folder_url) {
+    $baseurl = rtrim($this->upload_dir['baseurl'], '/');
+    $relative_path = substr($folder_url, strlen($baseurl));
+    $relative_path = str_replace('\\', '/', $relative_path);
+
+    // Normalize only the relative path, preserving the URL scheme and folder case.
+    return trim(preg_replace('#/+#', '/', $relative_path), '/');
+  }
+
   public function folder_exist($folder_path) {
     global $wpdb;
     
-    // Normalize and sanitize the folder path
-    $relative_path = substr($folder_path, $this->base_url_length);
-    $relative_path = ltrim($relative_path, '/');
-    $relative_path = sanitize_text_field($relative_path);
-    
-    $normalized_relative_path = strtolower(rtrim(preg_replace('/\/+/', '/', $relative_path), '/'));
-    //error_log("normalized_relative_path $normalized_relative_path");
+    $normalized_relative_path = $this->get_normalized_folder_relative_path($folder_path);
 
     // Use a prepared statement to query the database
     $sql = $wpdb->prepare(
@@ -1529,10 +1532,14 @@ and pm.meta_key = '_wp_attached_file'";
     global $wpdb;    
     $table = $wpdb->prefix . "posts";	    
 		
+    $attachment_location = $this->get_normalized_folder_relative_path($base_path);
+    $base_path = rtrim($this->upload_dir['baseurl'], '/');
+    if($attachment_location !== '') {
+      $base_path .= '/' . $attachment_location;
+    }
+
     $new_folder_id = $this->mpmlp_insert_post(MAXGALLERIA_MEDIA_LIBRARY_POST_TYPE, $folder_name, $base_path, 'publish' );
 
-		$attachment_location = substr($base_path, $this->base_url_length);
-		$attachment_location = ltrim($attachment_location, '/');
 				
 		update_post_meta($new_folder_id, '_wp_attached_file', $attachment_location);
         		
@@ -2733,7 +2740,7 @@ AND meta_key = '_wp_attached_file'", $parent_folder_id);
     $new_folder_name = basename($new_folder_name);
 
     // Construct the new folder path
-    $new_folder_path = rtrim($absolute_path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $new_folder_name;
+    $new_folder_path = rtrim($absolute_path, '/\\') . DIRECTORY_SEPARATOR . $new_folder_name;
 
     // Validate up to the parent directory
     $parent_dir = dirname($new_folder_path);        
