@@ -3,7 +3,7 @@
 Plugin Name: Media Library Folders
 Plugin URI: https://maxgalleria.com
 Description: Gives you the ability to adds folders and move files in the WordPress Media Library.
-Version: 8.4.3
+Version: 8.4.4
 Author: Max Foundry
 Author URI: https://maxfoundry.com
 
@@ -75,7 +75,7 @@ class MGMediaLibraryFolders {
   
 	public function set_global_constants() {	
 		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_KEY', 'maxgalleria_media_library_version');
-		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.3');
+		define('MAXGALLERIA_MEDIA_LIBRARY_VERSION_NUM', '8.4.4');
 		define('MAXGALLERIA_MEDIA_LIBRARY_IGNORE_NOTICE', 'maxgalleria_media_library_ignore_notice');
 		define('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_NAME', trim(dirname(plugin_basename(__FILE__)), '/'));
     if(!defined('MAXGALLERIA_MEDIA_LIBRARY_PLUGIN_DIR'))
@@ -234,7 +234,6 @@ class MGMediaLibraryFolders {
     add_action('wp_ajax_nopriv_mlf_check_for_new_folders', array($this, 'mlf_check_for_new_folders'));
     add_action('wp_ajax_mlf_check_for_new_folders', array($this, 'mlf_check_for_new_folders'));
 
-    add_action('wp_ajax_nopriv_mlfp_display_bda_info', array($this, 'mlfp_display_bda_info'));
     add_action('wp_ajax_mlfp_display_bda_info', array($this, 'mlfp_display_bda_info'));    
     
     //add_action( 'add_attachment', array($this,'add_attachment_to_folder'));
@@ -322,10 +321,8 @@ class MGMediaLibraryFolders {
     add_action('wp_ajax_nopriv_mlfp_load_fe_image', array($this, 'mlfp_load_fe_image'));
     add_action('wp_ajax_mlfp_load_fe_image', array($this, 'mlfp_load_fe_image'));
     
-    add_action('wp_ajax_nopriv_mlfp_toggle_file_access', array($this, 'mlfp_toggle_file_access'));
     add_action('wp_ajax_mlfp_toggle_file_access', array($this, 'mlfp_toggle_file_access'));    
     
-    add_action('wp_ajax_nopriv_mlfp_update_bda_record', array($this, 'mlfp_update_bda_record'));
     add_action('wp_ajax_mlfp_update_bda_record', array($this, 'mlfp_update_bda_record'));    
     
     add_action('wp_ajax_nopriv_mflp_enable_auto_protect', array($this, 'mflp_enable_auto_protect'));
@@ -6440,8 +6437,15 @@ and meta_key = '_wp_attached_file'";
 		$refresh = false;
     $scaled = false;
     $copy_id = intval($copy_id);
-    
-    $destination = get_user_meta($user_id, MAXG_MC_DESTINATION_FOLDER, true);
+
+    if(!$this->can_manage_media_attachment($copy_id)) {
+      return esc_html__('You are not allowed to modify this file.', 'maxgalleria-media-library');
+    }
+
+    // Protection changes must go through the access-control workflow.
+    if($this->is_file_protected($copy_id)) {
+      return esc_html__('Use the file access controls to move protected files.', 'maxgalleria-media-library');
+    }
     
     $sql = "select meta_value as attached_file
 from {$wpdb->prefix}postmeta 
@@ -6460,13 +6464,22 @@ AND meta_key = '_wp_attached_file'";
 
     $image_path = $this->get_absolute_path($image_location);
 
-    $destination_path = $this->get_absolute_path($destination);
+    $destination_path = $this->get_validated_media_folder_path($folder_id);
+    if($destination_path === false ||
+       !$this->is_path_inside($this->upload_dir['basedir'], $image_path) ||
+       $this->is_path_inside($this->protected_content_dir, $image_path)) {
+      return esc_html__('The selected file or destination folder is not available.', 'maxgalleria-media-library');
+    }
 
     $folder_basename = basename($destination_path);
     
     $basename = pathinfo($image_path, PATHINFO_BASENAME);
 
     $destination_name = $destination_path . DIRECTORY_SEPARATOR . $basename;
+
+    if(file_exists($destination_name)) {
+      return esc_html__('A file with that name already exists in the destination folder.', 'maxgalleria-media-library');
+    }
     
     $copy_status = true;
 
@@ -7384,28 +7397,55 @@ AND meta_key = '_wp_attached_file'";
         
   }
     
+  private function can_manage_media_attachment($attachment_id) {
+    if($attachment_id < 1 || !is_user_logged_in() || !current_user_can('upload_files')) {
+      return false;
+    }
+
+    $attachment = get_post($attachment_id);
+    if(!$attachment || $attachment->post_type !== 'attachment' ||
+       !current_user_can('edit_post', $attachment_id)) {
+      return false;
+    }
+
+    return current_user_can('manage_options') ||
+      (int) $attachment->post_author === (int) get_current_user_id();
+  }
+
+  private function check_bda_ajax_permissions($attachment_id) {
+    $nonce = isset($_POST['nonce']) && is_string($_POST['nonce']) ? wp_unslash($_POST['nonce']) : '';
+    if(!wp_verify_nonce($nonce, MAXGALLERIA_MEDIA_LIBRARY_NONCE) ||
+       $attachment_id < 1 || !$this->can_manage_media_attachment($attachment_id)) {
+      wp_die(esc_html__('You are not allowed to access this file.', 'maxgalleria-media-library'), '', array('response' => 403));
+    }
+  }
+
+  private function get_validated_media_folder_path($folder_id) {
+    $folder = $folder_id > 0 ? get_post($folder_id) : null;
+    if(!$folder || $folder->post_type !== MAXGALLERIA_MEDIA_LIBRARY_POST_TYPE ||
+       !metadata_exists('post', $folder_id, '_wp_attached_file')) {
+      return false;
+    }
+
+    $path = $this->get_folder_path($folder_id);
+    if(!is_dir($path) || !$this->is_path_inside($this->upload_dir['basedir'], $path) ||
+       $this->is_path_inside($this->protected_content_dir, $path)) {
+      return false;
+    }
+
+    return realpath($path);
+  }
+
   public function mlfp_toggle_file_access() {
         
-    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
-      exit(esc_html__('missing nonce!','maxgalleria-media-library'));
-    }
-    
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
-    }
+    $next_id = isset($_POST['file_id']) && is_scalar($_POST['file_id']) ? intval($_POST['file_id']) : 0;
+    $this->check_bda_ajax_permissions($next_id);
         
-    $next_id = intval($this->get_ajax_paramater('file_id', ''));
+    $current_folder = isset($_POST['current_folder']) && is_scalar($_POST['current_folder']) ? intval($_POST['current_folder']) : 0;
         
-    $current_folder = intval($this->get_ajax_paramater('current_folder', ''));
-        
-    $protected = intval($this->get_ajax_paramater('protected', '0'));
+    $protected = isset($_POST['protected']) && is_scalar($_POST['protected']) ? (string) $_POST['protected'] : '';
                         
-    if($next_id != "") {
-      $message = $this->move_to_protected_folder($next_id, $current_folder, $protected);
-    } else {
-      $message = esc_html__("Finished moving files to protected folder. ",'maxgalleria-media-library');
-    }  
+    $message = $this->move_to_protected_folder($next_id, $current_folder, $protected);
         
     echo $message;
     
@@ -7414,15 +7454,23 @@ AND meta_key = '_wp_attached_file'";
   }
   
   public function move_to_protected_folder($next_id, $current_folder, $protected) {
-        
-    require_once( ABSPATH . 'wp-admin/includes/image.php' );
+    $next_id = intval($next_id);
+    if($next_id < 1 || !$this->can_manage_media_attachment($next_id)) {
+      return esc_html__('You are not allowed to modify this file.', 'maxgalleria-media-library');
+    }
+
+    // The supplied state is only a concurrency check, never the authority.
+    $stored_protected = $this->is_file_protected($next_id) ? 1 : 0;
+    if(!in_array((string) $protected, array('0', '1'), true) || (int) $protected !== $stored_protected) {
+      return esc_html__('The file access status has changed. Please refresh this page.', 'maxgalleria-media-library');
+    }
+    $protected = $stored_protected;
         
     global $wpdb, $is_IIS;
 		$message = "";
 		$files = "";
 		$refresh = false;
     $scaled = false;
-    $next_id = intval($next_id);
     
     $sql = "select meta_value as attached_file
 from $wpdb->postmeta 
@@ -7437,8 +7485,6 @@ AND meta_key = '_wp_attached_file'";
       return esc_html__('Could not find the selected file.','maxgalleria-media-library') . PHP_EOL;
     }
 
-    remove_filter( 'wp_generate_attachment_metadata', array($this, 'add_attachment_to_folder2'));   
-
     $baseurl = $this->upload_dir['baseurl'];
     $baseurl = rtrim($baseurl, '/') . '/';
     $image_location = $baseurl . ltrim($row->attached_file, '/');
@@ -7450,19 +7496,45 @@ AND meta_key = '_wp_attached_file'";
 
     $image_path = $this->get_absolute_path($image_location);
     //error_log("image_path $image_path");
+
+    if(!$this->is_path_inside($this->upload_dir['basedir'], $image_path) ||
+       $this->is_path_inside($this->protected_content_dir, $image_path) !== (bool) $protected) {
+      return esc_html__('The selected file is not available.', 'maxgalleria-media-library');
+    }
     
     if($protected == 0 ) {
       $destination_path = $this->protected_content_dir;   
+
+      $relative_path = str_replace('\\', '/', $row->attached_file);
+      if(preg_match('#(^|/)\.\.?(/|$)#', $relative_path) ||
+         !$this->is_path_inside($this->upload_dir['basedir'], $destination_path)) {
+        return esc_html__('The destination folder is not available.', 'maxgalleria-media-library');
+      }
       
       //error_log('Protecting file ' . $row->attached_file);
       
-      $destination_name = $destination_path . DIRECTORY_SEPARATOR . $row->attached_file;
+      $destination_name = rtrim($destination_path, '/\\') . '/' . ltrim($relative_path, '/');
       //error_log("destination_name $destination_name");
-      $position = strrpos($destination_name, '/');
-      $destination_folder = substr($destination_name, 0, $position);
+      $destination_folder = dirname($destination_name);
+
+      // Check existing ancestors before creating any directories, including symlinks.
+      $existing_parent = $destination_folder;
+      while(!file_exists($existing_parent)) {
+        $parent = dirname($existing_parent);
+        if($parent === $existing_parent) {
+          return esc_html__('The destination folder is not available.', 'maxgalleria-media-library');
+        }
+        $existing_parent = $parent;
+      }
+      if(!$this->is_path_inside($destination_path, $existing_parent)) {
+        return esc_html__('The destination folder is not available.', 'maxgalleria-media-library');
+      }
       
     } else {      
-      $destination_path = $this->get_folder_path($current_folder);
+      $destination_path = $this->get_validated_media_folder_path(intval($current_folder));
+      if($destination_path === false) {
+        return esc_html__('The destination folder is not available.', 'maxgalleria-media-library');
+      }
       $destination_folder = $destination_path;
       
       //error_log('Unprotecting file ' . $row->attached_file);
@@ -7473,6 +7545,13 @@ AND meta_key = '_wp_attached_file'";
       
     }
     //error_log("destination_path $destination_path");
+
+    if(file_exists($destination_name)) {
+      return esc_html__('A file with that name already exists in the destination folder.', 'maxgalleria-media-library');
+    }
+
+    require_once( ABSPATH . 'wp-admin/includes/image.php' );
+    remove_filter('wp_generate_attachment_metadata', array($this, 'add_attachment_to_folder2'));
     
     
     if(!file_exists($destination_folder)) {
@@ -7654,7 +7733,8 @@ AND meta_key = '_wp_attached_file'";
     global $wpdb;
     $file_id = intval($file_id);
 
-    $sql = "select block from wp_mgmlp_block_access where attachment_id = $file_id";
+    $table = $wpdb->prefix . MAXGALLERIA_MEDIA_LIBRARY_BLOCK_ACCESS_TABLE;
+    $sql = $wpdb->prepare("select block from $table where attachment_id = %d", $file_id);
 
     $row = $wpdb->get_row($sql);
 
@@ -7736,19 +7816,8 @@ AND meta_key = '_wp_attached_file'";
     
     $message = "";
     
-    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
-      exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
-    }
-    
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
-    }
-              
-		if ((isset($_POST['image_id'])) && (strlen(trim($_POST['image_id'])) > 0))
-      $image_id = intval(trim(sanitize_text_field($_POST['image_id'])));
-    else
-      $image_id = 0;
+    $image_id = isset($_POST['image_id']) && is_scalar($_POST['image_id']) ? intval($_POST['image_id']) : 0;
+    $this->check_bda_ajax_permissions($image_id);
         
 		if ((isset($_POST['title'])) && (strlen(trim($_POST['title'])) > 0))
       $title = trim(sanitize_text_field($_POST['title']));
@@ -7756,10 +7825,7 @@ AND meta_key = '_wp_attached_file'";
       $title = "";
     
     
-		if ((isset($_POST['current_user'])) && (strlen(trim($_POST['current_user'])) > 0))
-      $current_user = intval(trim(sanitize_text_field($_POST['current_user'])));
-    else
-      $current_user = 0;
+    $current_user = get_current_user_id();
     
     if($image_id != 0) {
       
@@ -7797,6 +7863,10 @@ AND meta_key = '_wp_attached_file'";
     
     global $wpdb;
     $image_id = intval($image_id);
+
+    if(!$this->can_manage_media_attachment($image_id)) {
+      return false;
+    }
     
     $table = $wpdb->prefix . MAXGALLERIA_MEDIA_LIBRARY_BLOCK_ACCESS_TABLE;
         
@@ -7812,6 +7882,9 @@ AND meta_key = '_wp_attached_file'";
   public function get_private_link($image_id, $current_user) {
     
     $hash = $this->get_hash_id($image_id);
+    if(!$hash) {
+      return '';
+    }
         
     $download_page = get_permalink(get_option(MLFP_BDA_DOWNLOAD_PAGE));
     
@@ -7820,16 +7893,8 @@ AND meta_key = '_wp_attached_file'";
     
   public function mlfp_display_bda_info() {
     
-    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
-      exit(esc_html__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
-    }
-    
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
-    }    
-          
-    $image_id = intval($this->get_ajax_paramater('image_id', 0));
+    $image_id = isset($_POST['image_id']) && is_scalar($_POST['image_id']) ? intval($_POST['image_id']) : 0;
+    $this->check_bda_ajax_permissions($image_id);
     
     $title = $this->get_ajax_paramater('title', '');
     
@@ -7852,6 +7917,10 @@ AND meta_key = '_wp_attached_file'";
     
     global $wpdb;
     $image_id = intval($image_id);
+
+    if(!$this->can_manage_media_attachment($image_id)) {
+      return false;
+    }
     
     $table = $wpdb->prefix . MAXGALLERIA_MEDIA_LIBRARY_BLOCK_ACCESS_TABLE;
 
@@ -7878,16 +7947,8 @@ AND meta_key = '_wp_attached_file'";
     
     global $wpdb;
     
-    if ( !wp_verify_nonce( $_POST['nonce'], MAXGALLERIA_MEDIA_LIBRARY_NONCE)) {
-      exit(__('Missing nonce! Please refresh this page.','maxgalleria-media-library'));
-    }
-    
-    // Check if the current user has the capability to upload files
-    if(!current_user_can('upload_files')){
-      exit(esc_html__('You do not have the capability to upload files.','maxgalleria-media-library'));
-    }
-        
-    $image_id = intval($this->get_ajax_paramater('image_id', 0));
+    $image_id = isset($_POST['image_id']) && is_scalar($_POST['image_id']) ? intval($_POST['image_id']) : 0;
+    $this->check_bda_ajax_permissions($image_id);
     
     $download_limit = intval($this->get_ajax_paramater('download_limit', 0));
     
@@ -7903,6 +7964,10 @@ AND meta_key = '_wp_attached_file'";
     
     global $wpdb;
     $image_id = intval($image_id);
+
+    if(!$this->can_manage_media_attachment($image_id)) {
+      return false;
+    }
     
     $table = $wpdb->prefix . MAXGALLERIA_MEDIA_LIBRARY_BLOCK_ACCESS_TABLE;
     

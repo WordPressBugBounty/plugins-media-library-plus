@@ -811,7 +811,7 @@ jQuery(document).ready(function(){
     e.stopImmediatePropagation();
     jQuery('#mlfp-config-links-popup').fadeOut(300);
     
-    jQuery('tbody#blocked-links-list tr').each(function() {  
+    jQuery('tbody#blocked-links-list tr.bda-row[data-id]').each(function() {
       var image_id = jQuery(this).attr('data-id');
       var download_limit = jQuery('#limit-'+image_id).val();
       var expiration_date = jQuery('#ex-date-'+image_id).val();
@@ -882,6 +882,10 @@ function copyToClipboard(textToCopy) {
 }
 
 function update_bda_record(image_id, download_limit, expiration_date) {
+
+  if(!/^[1-9][0-9]*$/.test(String(image_id))) {
+    return;
+  }
   
   jQuery("#ajaxloaderbda").show();
     
